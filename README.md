@@ -111,12 +111,12 @@ wails build -clean
 
 ## Future Enhancements
 
-- Data persistence across application restarts
-- Weekly/monthly usage reports
-- Application time limits and notifications
-- Cross-platform support (macOS, Linux)
-- System tray integration
-- Usage export functionality
+- [ ] Data persistence across application restarts
+- [ ] Weekly/monthly usage reports
+- [ ] Application time limits and notifications
+- [ ] Cross-platform support (macOS, Linux)
+- [ ] System tray integration
+- [ ] Usage export functionality
 
 ## License
 
