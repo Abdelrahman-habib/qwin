@@ -72,7 +72,7 @@ jobs:
       - name: Setup pnpm for linting
         uses: pnpm/action-setup@v4
         with:
-          version: 8
+          version: 10.10.0
 
       - name: Install frontend dependencies for linting
         working-directory: frontend
