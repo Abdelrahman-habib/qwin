@@ -1,13 +1,5 @@
-import { createContext, useState, ReactNode } from "react";
-
-interface TitleContextType {
-  title: string;
-  setTitle: (title: string) => void;
-}
-
-export const TitleContext = createContext<TitleContextType | undefined>(
-  undefined
-);
+import { useState, ReactNode } from "react";
+import { TitleContext } from "./TitleContext";
 
 interface TitleProviderProps {
   children: ReactNode;
