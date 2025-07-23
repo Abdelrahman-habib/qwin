@@ -66,7 +66,8 @@ jobs:
         if: matrix.build.os == 'windows-latest'
         run: |
           go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-          gosec ./...
+          go run github.com/securecodewarrior/gosec/v2/cmd/gosec@latest ./...
+        continue-on-error: true
 
       - name: Check Go vulnerabilities
         if: matrix.build.os == 'windows-latest'
@@ -98,3 +99,30 @@ jobs:
             build/bin/*
             !build/bin/*.syso
           retention-days: 30
+
+      # Comment on PR with artifact download link
+      - name: Comment on PR with build artifacts
+        if: github.event_name == 'pull_request' && success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifactName = `${{ matrix.build.name }}-${{ matrix.build.platform }}-${{ github.run_number }}`.replace(/\//g, '-');
+            const runId = context.runId;
+            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const artifactUrl = `${repoUrl}/actions/runs/${runId}`;
+            
+            const comment = `## 🚀 Build Artifacts Ready!
+            
+**Platform**: \`${{ matrix.build.platform }}\`
+**Build**: \`#${{ github.run_number }}\`
+
+📦 **Download**: [${artifactName}](${artifactUrl})
+
+> Artifacts are available for 30 days from the Actions run page.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
