@@ -106,19 +106,19 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const artifactName = `${{ matrix.build.name }}-${{ matrix.build.platform }}-${{ github.run_number }}`.replace(/\//g, '-');
+            const artifactName = '${{ matrix.build.name }}-${{ matrix.build.platform }}-${{ github.run_number }}'.replace(/\//g, '-');
             const runId = context.runId;
-            const repoUrl = `https://github.com/${context.repo.owner}/${context.repo.repo}`;
+            const repoUrl = 'https://github.com/${{ github.repository }}';
             const artifactUrl = `${repoUrl}/actions/runs/${runId}`;
-            
+
             const comment = `## 🚀 Build Artifacts Ready!
-            
-**Platform**: \`${{ matrix.build.platform }}\`
-**Build**: \`#${{ github.run_number }}\`
 
-📦 **Download**: [${artifactName}](${artifactUrl})
+            **Platform**: \`${{ matrix.build.platform }}\`
+            **Build**: \`#${{ github.run_number }}\`
 
-> Artifacts are available for 30 days from the Actions run page.`;
+            📦 **Download**: [${artifactName}](${artifactUrl})
+
+            > Artifacts are available for 30 days from the Actions run page.`;
 
             github.rest.issues.createComment({
               issue_number: context.issue.number,
