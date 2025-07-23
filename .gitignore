@@ -18,9 +18,6 @@ go.work.sum
 # Dependency directories
 vendor/
 
-# Go module cache
-go.sum
-
 # WAILS build folders
 build/
 dist/
