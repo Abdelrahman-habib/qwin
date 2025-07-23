@@ -64,9 +64,9 @@ jobs:
 
       - name: Run Go security checks
         if: matrix.build.os == 'windows-latest'
-        run: |
-          go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
-          go run github.com/securecodewarrior/gosec/v2/cmd/gosec@latest ./...
+        uses: securecodewarrior/github-action-gosec@master
+        with:
+          args: "./..."
         continue-on-error: true
 
       - name: Check Go vulnerabilities
