@@ -14,6 +14,10 @@ env:
 
 jobs:
   build:
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
     strategy:
       # Failure in one platform build won't impact the others
       fail-fast: false
