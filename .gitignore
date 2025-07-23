@@ -18,9 +18,6 @@ go.work.sum
 # Dependency directories
 vendor/
 
-# Go module cache
-go.sum
-
 # WAILS build folders
 build/
 dist/
@@ -32,10 +29,10 @@ frontend/build/
 frontend/.next/
 frontend/out/
 
-# Frontend package manager files
+# Frontend package manager files (keep the one you use, ignore others)
 frontend/package-lock.json
 frontend/yarn.lock
-frontend/pnpm-lock.yaml
+# frontend/pnpm-lock.yaml  # Uncommented to commit pnpm lock file
 
 # Frontend cache and temp files
 frontend/.cache/

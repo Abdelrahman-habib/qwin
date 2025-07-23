@@ -27,7 +27,7 @@ func NewScreenTimeTracker() *ScreenTimeTracker {
 		appInfoCache: make(map[string]*platform.AppInfo),
 		startTime:    time.Now(),
 		stopTracking: make(chan bool),
-		windowAPI:    platform.NewWindowsAPI(),
+		windowAPI:    platform.NewWindowAPI(),
 	}
 }
 

@@ -1,5 +1,5 @@
 import { WidgetHeader } from "./WidgetHeader";
-import { TitleProvider } from "@/contexts/TitleContext";
+import { TitleProvider } from "@/contexts/TitleProvider";
 
 export function RootLayout({ children }: { children?: React.ReactNode }) {
   return (
