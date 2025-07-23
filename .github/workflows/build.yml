@@ -40,6 +40,12 @@ jobs:
         with:
           submodules: recursive
 
+      # Setup pnpm before Wails build action (since wails.json uses pnpm commands)
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.10.0
+
       # Use the official Wails build action (using @main to avoid deprecated upload-artifact@v3)
       - name: Build Wails app
         uses: dAppServer/wails-build-action@main
