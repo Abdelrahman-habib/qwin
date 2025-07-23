@@ -1,0 +1,59 @@
+# Official Wails Cross-Platform Build Template
+# Based on: https://wails.io/docs/guides/crossplatform-build/
+# Rename to build.yml when you add cross-platform support
+
+name: "Wails Cross-Platform Build"
+
+on:
+  push:
+    tags:
+    # Match any new tag
+      - '*'
+
+env:
+  # Necessary for most environments as build failure can occur due to OOM issues
+  NODE_OPTIONS: "--max-old-space-size=4096"
+
+jobs:
+  build:
+    strategy:
+    # Failure in one platform build won't impact the others
+      fail-fast: false
+      matrix:
+        build:
+          - name: 'qwin'
+            platform:  'linux/amd64'
+            os: 'ubuntu-latest'
+          - name: 'qwin'
+            platform:  'windows/amd64'
+            os: 'windows-latest'
+          - name: 'qwin'
+            platform:  'darwin/universal'
+            os: 'macos-latest'
+
+    runs-on: ${{ matrix.build.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build wails
+        uses: dAppServer/wails-build-action@v2.2
+        id: build
+        with:
+          build-name: ${{ matrix.build.name }}
+          build-platform: ${{ matrix.build.platform }}
+          package: false
+          go-version: '1.23'
+          node-version: '18'
+
+      # Upload artifacts to GitHub Actions
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.build.name }}-${{ matrix.build.platform }}
+          path: |
+            build/bin/*
+            !build/bin/*.syso

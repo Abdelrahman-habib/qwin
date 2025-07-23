@@ -1,3 +1,5 @@
+//go:build windows
+
 package platform
 
 import (
@@ -62,6 +64,11 @@ type WindowsAPI struct{}
 // NewWindowsAPI creates a new Windows API instance
 func NewWindowsAPI() *WindowsAPI {
 	return &WindowsAPI{}
+}
+
+// NewWindowAPI creates a new WindowAPI instance for Windows
+func NewWindowAPI() WindowAPI {
+	return NewWindowsAPI()
 }
 
 // GetCurrentAppName gets the name of the currently active application
