@@ -58,6 +58,7 @@ frontend/tsconfig.*.tsbuildinfo
 
 # IDE and editor files
 .vscode/
+.kiro/
 .idea/
 *.swp
 *.swo
@@ -176,3 +177,4 @@ tests/
 # Local configuration files
 config.local.*
 settings.local.*
+
