@@ -11,14 +11,12 @@ import (
 type App struct {
 	ctx     context.Context
 	tracker *services.ScreenTimeTracker
-	scraper *services.LinkedInScraper
 }
 
 // NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{
 		tracker: services.NewScreenTimeTracker(),
-		scraper: services.NewLinkedInScraper(),
 	}
 }
 
@@ -51,16 +49,4 @@ func (a *App) GetUsageData() *types.UsageData {
 // ResetUsageData resets the usage data (for daily reset)
 func (a *App) ResetUsageData() {
 	a.tracker.ResetUsageData()
-}
-
-// ScrapeCourse scrapes a LinkedIn Learning course and returns the result
-func (a *App) ScrapeCourse(courseURL string) *types.ScrapingResult {
-	result, err := a.scraper.ScrapeCourse(courseURL)
-	if err != nil {
-		return &types.ScrapingResult{
-			Success: false,
-			Error:   err.Error(),
-		}
-	}
-	return result
 }
