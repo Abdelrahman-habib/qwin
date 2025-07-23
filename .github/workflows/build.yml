@@ -40,9 +40,9 @@ jobs:
         with:
           submodules: recursive
 
-      # Use the official Wails build action (comprehensive and handles platform setup)
+      # Use the official Wails build action (using @main to avoid deprecated upload-artifact@v3)
       - name: Build Wails app
-        uses: dAppServer/wails-build-action@v2.2
+        uses: dAppServer/wails-build-action@main
         id: build
         with:
           build-name: ${{ matrix.build.name }}
@@ -69,9 +69,18 @@ jobs:
           govulncheck ./...
 
       # Frontend linting (can run on all platforms)
+      - name: Setup pnpm for linting
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
+      - name: Install frontend dependencies for linting
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
       - name: Run frontend linting
         working-directory: frontend
-        run: npm run lint
+        run: pnpm run lint
 
       # Upload artifacts
       - name: Upload build artifacts

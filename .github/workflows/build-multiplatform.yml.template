@@ -48,6 +48,7 @@ jobs:
           package: false
           go-version: '1.23'
           node-version: '18'
+          # Note: Wails build action may need manual pnpm setup if it doesn't detect pnpm automatically
 
       # Upload artifacts to GitHub Actions
       - name: Upload build artifacts

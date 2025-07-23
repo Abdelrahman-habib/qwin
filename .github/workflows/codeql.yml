@@ -74,11 +74,18 @@ jobs:
         with:
           node-version: "18"
 
+      # Setup pnpm for JavaScript/TypeScript analysis
+      - name: Setup pnpm
+        if: matrix.language == 'javascript-typescript'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 8
+
       # Install frontend dependencies for better analysis
       - name: Install frontend dependencies
         if: matrix.language == 'javascript-typescript'
         working-directory: frontend
-        run: npm ci --ignore-scripts
+        run: pnpm install --frozen-lockfile
         continue-on-error: true
 
       # Initializes the CodeQL tools for scanning.
