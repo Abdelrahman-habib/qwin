@@ -9,6 +9,11 @@ on:
     # Run security scans daily at 2 AM UTC
     - cron: "0 2 * * *"
 
+permissions:
+  contents: read
+  security-events: write
+  actions: read
+
 jobs:
   dependency-scan:
     name: Dependency Security Scan
@@ -73,7 +78,7 @@ jobs:
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
-        if: steps.check-trivy.outputs.trivy_results_exist == 'true'
+        if: steps.check-trivy.outputs.trivy_results_exist == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
         with:
           sarif_file: "trivy-results.sarif"
 
