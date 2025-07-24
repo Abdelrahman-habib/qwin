@@ -88,10 +88,18 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run TruffleHog OSS
+      - name: Run TruffleHog OSS (PR)
+        if: github.event_name == 'pull_request'
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: main
+          base: ${{ github.event.repository.default_branch }}
           head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: Run TruffleHog OSS (Push/Schedule)
+        if: github.event_name != 'pull_request'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
           extra_args: --debug --only-verified
