@@ -20,25 +20,33 @@ var assets embed.FS
 //go:embed assets/appicon.png
 var icon []byte
 
+// AppEnvironment is set at build time through ldflags
+var AppEnvironment string
+
 func main() {
+
+	// Set default environment if not provided by ldflags (e.g., for 'wails dev')
+	if AppEnvironment == "" {
+		AppEnvironment = "development"
+	}
+	log.Printf("Application starting in '%s' mode", AppEnvironment)
+
 	// Create an instance of the app structure
-	application := app.NewApp()
+	application := app.NewApp(AppEnvironment)
 
 	// Create application with options
 	err := wails.Run(&options.App{
-		Title:             "ScreenTime Widget",
-		Width:             320,
-		Height:            200,
-		MinWidth:          280,
-		MinHeight:         180,
-		MaxWidth:          400,
-		MaxHeight:         300,
+		Title:             "Qwin",
+		Width:             1200,
+		Height:            800,
+		MinWidth:          1000,
+		MinHeight:         600,
 		DisableResize:     false,
 		Fullscreen:        false,
 		Frameless:         true,
 		StartHidden:       false,
 		HideWindowOnClose: false,
-		AlwaysOnTop:       true,
+		AlwaysOnTop:       false,
 		BackgroundColour:  &options.RGBA{R: 0, G: 0, B: 0, A: 0},
 		AssetServer: &assetserver.Options{
 			Assets: assets,
@@ -77,7 +85,7 @@ func main() {
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			About: &mac.AboutInfo{
-				Title:   "qwin",
+				Title:   "Qwin",
 				Message: "",
 				Icon:    icon,
 			},

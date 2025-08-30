@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { GetUsageData } from "../../wailsjs/go/app/App";
-import { types } from "../../wailsjs/go/models";
+import { GetUsageData } from "@wailsjs/go/app/App";
+import { types } from "@wailsjs/go/models";
 
 /**
  * Custom hook for managing screen time data
