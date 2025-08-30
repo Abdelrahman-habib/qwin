@@ -106,7 +106,7 @@ importers:
         specifier: ^8.38.0
         version: 8.38.0(eslint@9.31.0(jiti@1.21.7))(typescript@5.8.3)
       vite:
-        specifier: ^7.1.3
+        specifier: ^7.1.1
         version: 7.1.3(@types/node@22.16.5)(jiti@1.21.7)(tsx@4.20.5)(yaml@2.8.0)
       vitest:
         specifier: ^3.2.4
