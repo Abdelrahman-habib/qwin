@@ -1,6 +1,6 @@
 import { ChevronRight, Clock } from "lucide-react";
-import { formatTime } from "../../utils/timeFormatter";
-import { Button } from "../ui/button";
+import { formatTime } from "@/utils/timeFormatter";
+import { Button } from "@/components/ui/button";
 
 interface TotalTimeDisplayProps {
   totalTime: number;

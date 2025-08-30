@@ -1,16 +1,20 @@
+import { types } from "@wailsjs/go/models";
+
+import { JSX } from "react/jsx-runtime";
+
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
-import { types } from "../../../wailsjs/go/models";
-import { APP_CONFIG } from "../../constants/app";
+
+import { APP_CONFIG } from "@/constants/app";
 import { AppIcon } from "./AppIcon";
 import { LoadingSkeleton } from "./LoadingSkeleton";
 import { EmptyState } from "./EmptyState";
-import { JSX } from "react/jsx-runtime";
 
 interface AppUsageChartProps {
   apps: types.AppUsage[];
