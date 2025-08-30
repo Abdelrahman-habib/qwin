@@ -9,14 +9,16 @@ import (
 
 // App struct represents the main application
 type App struct {
-	ctx     context.Context
-	tracker *services.ScreenTimeTracker
+	ctx         context.Context
+	tracker     *services.ScreenTimeTracker
+	environment string
 }
 
 // NewApp creates a new App application struct
-func NewApp() *App {
+func NewApp(env string) *App {
 	return &App{
-		tracker: services.NewScreenTimeTracker(),
+		tracker:     services.NewScreenTimeTracker(),
+		environment: env,
 	}
 }
 
