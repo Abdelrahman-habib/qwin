@@ -4,7 +4,8 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/components/theme-provider";
 import SpotlightCard from "@/components/ui/spotlight-card";
-import { Sidebar } from "@/components/navigation/sidebar";
+import { MainSidebar } from "@/components/navigation/MainSidebar";
+import { SecondarySidebar } from "@/components/navigation/SecondarySidebar";
 import { RootLayout } from "@/components/layout";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -17,7 +18,7 @@ export const Route = createRootRoute({
           spotlightColor="rgba(255, 255, 255, 0.07)"
         >
           <RootLayout>
-            <Sidebar />
+            <MainSidebar />
             <div className="flex-1 border-s border">
               <ScrollArea
                 className={
@@ -29,6 +30,7 @@ export const Route = createRootRoute({
                 </div>
               </ScrollArea>
             </div>
+            <SecondarySidebar />
           </RootLayout>
         </SpotlightCard>
       </ThemeProvider>

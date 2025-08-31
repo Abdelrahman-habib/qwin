@@ -3,6 +3,8 @@ import {
   ArrowLeftIcon,
   ArrowRightIcon,
   Copy,
+  MessageSquare,
+  Calendar,
   SidebarCloseIcon,
   SidebarOpenIcon,
   Square,
@@ -29,7 +31,14 @@ export function ApptHeader() {
 
   const { title } = useTitle();
 
-  const { isOpen, toggleSidebar } = useSidebar();
+  const {
+    isOpen,
+    toggleSidebar,
+    isChatSidebarOpen,
+    toggleChatSidebar,
+    isCalendarSidebarOpen,
+    toggleCalendarSidebar,
+  } = useSidebar();
 
   const [isMaximised, setIsMaximised] = React.useState(false);
 
@@ -64,7 +73,7 @@ export function ApptHeader() {
       <div
         className={cn(
           "flex items-center gap-2 select-none px-3",
-          APP_CONFIG.SIDEBAR_MiN_WIDTH_CLASS
+          APP_CONFIG.MAIN_SIDEBAR_MiN_WIDTH_CLASS
         )}
       >
         <img
@@ -81,6 +90,17 @@ export function ApptHeader() {
           className="flex items-center gap-1 border-l"
           style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}
         >
+          <Button
+            onClick={toggleSidebar}
+            variant="ghost"
+            className="transition-colors"
+          >
+            {isOpen ? (
+              <SidebarCloseIcon className="size-4" />
+            ) : (
+              <SidebarOpenIcon className="size-4" />
+            )}
+          </Button>
           <Button
             variant="ghost"
             size="icon"
@@ -102,19 +122,28 @@ export function ApptHeader() {
         {/* TODO: replace with search */}
         <div className="flex-1 text-center text-sm">{title}</div>
         <div
-          className="flex items-center gap-1"
+          className="flex items-center"
           style={{ "--wails-draggable": "no-drag" } as React.CSSProperties}
         >
           <Button
-            onClick={toggleSidebar}
+            onClick={toggleChatSidebar}
             variant="ghost"
-            className="transition-colors"
-          >
-            {isOpen ? (
-              <SidebarCloseIcon className="size-4" />
-            ) : (
-              <SidebarOpenIcon className="size-4" />
+            className={cn(
+              "transition-colors hover:bg-primary/5 border-x border-x-transparent",
+              isChatSidebarOpen && "bg-primary/5 border-x-primary/10"
             )}
+          >
+            <MessageSquare className="size-4" />
+          </Button>
+          <Button
+            onClick={toggleCalendarSidebar}
+            variant="ghost"
+            className={cn(
+              "transition-colors hover:bg-primary/5 border-x border-x-transparent",
+              isCalendarSidebarOpen && "bg-primary/5 border-x-primary/10"
+            )}
+          >
+            <Calendar className="size-4" />
           </Button>
           <Button
             variant="ghost"

@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useSidebar } from "@/hooks/use-sidebar";
 import { APP_CONFIG } from "@/constants/app";
 
-export function Sidebar() {
+export function MainSidebar() {
   const pathname = useLocation({
     select: (location) => location.pathname,
   });
@@ -18,7 +18,7 @@ export function Sidebar() {
     <div
       className={cn(
         "flex flex-col justify-start h-full bg-transparent p-0",
-        APP_CONFIG.SIDEBAR_MiN_WIDTH_CLASS
+        APP_CONFIG.MAIN_SIDEBAR_MiN_WIDTH_CLASS
       )}
     >
       {sidebarList.map((tab) => (

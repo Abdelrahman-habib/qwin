@@ -7,6 +7,10 @@ export const useSidebar = () =>
       return {
         isOpen: state.isOpen,
         toggleSidebar: state.toggleSidebar,
+        isChatSidebarOpen: state.isChatSidebarOpen,
+        toggleChatSidebar: state.toggleChatSidebar,
+        isCalendarSidebarOpen: state.isCalendarSidebarOpen,
+        toggleCalendarSidebar: state.toggleCalendarSidebar,
       };
     })
   );

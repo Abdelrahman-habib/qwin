@@ -4,5 +4,6 @@ export const APP_CONFIG = {
   APP_NAME: "qwin",
   VERSION: "1.0.0",
   DEFAULT_TAB: "usage",
-  SIDEBAR_MiN_WIDTH_CLASS: "min-w-48",
+  MAIN_SIDEBAR_MiN_WIDTH_CLASS: "min-w-48",
+  SECONDARY_SIDEBAR_MiN_WIDTH_CLASS: "min-w-72",
 } as const;
