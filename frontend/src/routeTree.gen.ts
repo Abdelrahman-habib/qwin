@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsageRouteImport } from './routes/usage'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PlannerIndexRouteImport } from './routes/planner/index'
 
 const UsageRoute = UsageRouteImport.update({
   id: '/usage',
@@ -28,35 +29,44 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PlannerIndexRoute = PlannerIndexRouteImport.update({
+  id: '/planner/',
+  path: '/planner/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/usage': typeof UsageRoute
+  '/planner': typeof PlannerIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/usage': typeof UsageRoute
+  '/planner': typeof PlannerIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/usage': typeof UsageRoute
+  '/planner/': typeof PlannerIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/settings' | '/usage'
+  fullPaths: '/' | '/settings' | '/usage' | '/planner'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/settings' | '/usage'
-  id: '__root__' | '/' | '/settings' | '/usage'
+  to: '/' | '/settings' | '/usage' | '/planner'
+  id: '__root__' | '/' | '/settings' | '/usage' | '/planner/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   SettingsRoute: typeof SettingsRoute
   UsageRoute: typeof UsageRoute
+  PlannerIndexRoute: typeof PlannerIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -82,6 +92,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/planner/': {
+      id: '/planner/'
+      path: '/planner'
+      fullPath: '/planner'
+      preLoaderRoute: typeof PlannerIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -89,6 +106,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   SettingsRoute: SettingsRoute,
   UsageRoute: UsageRoute,
+  PlannerIndexRoute: PlannerIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

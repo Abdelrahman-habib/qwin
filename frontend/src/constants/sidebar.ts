@@ -1,11 +1,11 @@
-import { Monitor, Settings, ChartColumnBig } from "lucide-react";
+import { Settings, ChartColumnBig, CalendarCheck } from "lucide-react";
 
 export const sidebarList = [
   {
-    id: "dashboard",
-    name: "Dashboard",
-    icon: Monitor,
-    path: "/",
+    id: "palnner",
+    name: "Palnner",
+    icon: CalendarCheck,
+    path: "/planner",
   },
   {
     id: "app-usage",
