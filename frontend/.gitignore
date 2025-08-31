@@ -26,6 +26,3 @@ dist-ssr
 
 # Build artifact
 wailsjs/
-
-# tanstack router artifacts
-src/routeTree.gen.ts
