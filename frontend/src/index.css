@@ -63,8 +63,15 @@
 }
 
 @font-face {
-  font-family: "SpaceMono";
-  src: url("/assets/fonts/SpaceMono-Regular.ttf");
+  font-family: "SF";
+  src: url("assets/fonts/SF-Compact.ttf") format("truetype");
+  unicode-range: U+000-5FF;
+}
+
+@font-face {
+  font-family: "SF";
+  src: url("assets/fonts/SF-Arabic.ttf") format("truetype");
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
 }
 
 @layer base {
@@ -72,7 +79,6 @@
     @apply border-border;
   }
   body {
-    @apply bg-transparent text-foreground;
-    font-family: SpaceMono, monospace;
+    @apply bg-transparent text-foreground font-[SF];
   }
 }
