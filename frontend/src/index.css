@@ -6,6 +6,20 @@
   box-sizing: border-box;
 }
 
+@font-face {
+  font-family: "app";
+  src: url("assets/fonts/SpaceMono.ttf") format("truetype");
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0100-024F;
+}
+
+@font-face {
+  font-family: "app";
+  src: url("assets/fonts/Alexandria.ttf") format("truetype");
+  font-display: swap;
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -62,23 +76,11 @@
   }
 }
 
-@font-face {
-  font-family: "SF";
-  src: url("assets/fonts/SF-Compact.ttf") format("truetype");
-  unicode-range: U+000-5FF;
-}
-
-@font-face {
-  font-family: "SF";
-  src: url("assets/fonts/SF-Arabic.ttf") format("truetype");
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
-}
-
 @layer base {
   * {
     @apply border-border;
   }
   body {
-    @apply bg-transparent text-foreground font-[SF];
+    @apply bg-transparent text-foreground font-sans;
   }
 }

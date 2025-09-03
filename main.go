@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"qwin/internal/app"
+	"qwin/internal/infrastructure/logging"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/logger"
@@ -32,10 +33,24 @@ func main() {
 	log.Printf("Application starting in '%s' mode", AppEnvironment)
 
 	// Create an instance of the app structure
-	application := app.NewApp(AppEnvironment)
+	application, err := app.NewApp(AppEnvironment)
+	if err != nil {
+		log.Fatalf("Failed to initialize application: %v", err)
+	}
+
+	// Configure log level based on environment
+	var logLevel logger.LogLevel
+	if AppEnvironment == "production" {
+		logLevel = logger.INFO
+	} else {
+		logLevel = logger.DEBUG
+	}
+
+	// Create Wails logger adapter using app's structured logger
+	wailsLogger := logging.NewWailsLoggerAdapter(application.GetLogger())
 
 	// Create application with options
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:             "Qwin",
 		Width:             1200,
 		Height:            800,
@@ -52,8 +67,8 @@ func main() {
 			Assets: assets,
 		},
 		Menu:             nil,
-		Logger:           nil,
-		LogLevel:         logger.DEBUG,
+		Logger:           wailsLogger,
+		LogLevel:         logLevel,
 		OnStartup:        application.Startup,
 		OnDomReady:       application.DomReady,
 		OnBeforeClose:    application.BeforeClose,

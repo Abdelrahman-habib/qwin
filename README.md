@@ -68,7 +68,7 @@ qwin/
 
 ### Prerequisites
 
-- Go 1.21 or later
+- Go 1.23 or later
 - Node.js 16 or later
 - Wails CLI v2
 
@@ -111,12 +111,26 @@ wails build -clean
 
 ## Future Enhancements
 
+### Core Features
+
 - [ ] Data persistence across application restarts
 - [ ] Weekly/monthly usage reports
 - [ ] Application time limits and notifications
 - [ ] Cross-platform support (macOS, Linux)
 - [ ] System tray integration
 - [ ] Usage export functionality
+
+### Production Database Migration Enhancements
+
+- [ ] **Database backup before migration**: Automatically create database backups before applying schema changes during app updates
+- [ ] **Backup retention policy**: Retain last 3 versions or 30 days, whichever is longer
+- [ ] **Recovery time objectives**: Set RPO = 0, RTO ≤ 30s on typical user machines
+- [ ] **Operational requirements**: Lock DB file during migration and present a non-cancellable progress UI
+- [ ] **Migration failure recovery**: Implement rollback mechanism to restore from backup if migration fails
+- [ ] **User feedback during migration**: Show progress dialog to inform users when database schema is being updated
+- [ ] **Migration validation**: Test migrations on a database copy before applying to production data
+- [ ] **Graceful degradation**: Allow app to run in compatibility mode if migration fails, rather than preventing startup
+- [ ] **Update notification system**: Integrate with separate updater app to handle coordinated updates and migrations
 
 ## License
 

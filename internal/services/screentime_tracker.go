@@ -1,43 +1,77 @@
 package services
 
 import (
+	"sort"
 	"sync"
 	"time"
 
+	"qwin/internal/infrastructure/logging"
 	"qwin/internal/platform"
+	"qwin/internal/repository"
 	"qwin/internal/types"
 )
 
 // ScreenTimeTracker manages screen time tracking functionality
 type ScreenTimeTracker struct {
-	usageData    map[string]int64
-	appInfoCache map[string]*platform.AppInfo
-	mutex        sync.RWMutex
-	lastApp      string
-	lastTime     time.Time
-	startTime    time.Time
-	stopTracking chan bool
-	windowAPI    platform.WindowAPI
+	usageData          map[string]int64
+	appInfoCache       map[string]*platform.AppInfo
+	mutex              sync.RWMutex
+	lastApp            string
+	lastTime           time.Time
+	startTime          time.Time
+	stopTracking       chan bool
+	windowAPI          platform.WindowAPI
+	repository         repository.UsageRepository
+	logger             logging.Logger
+	persistTicker      *time.Ticker
+	lastPersist        time.Time
+	currentDate        time.Time
+	persistenceEnabled bool
 }
 
-// NewScreenTimeTracker creates a new screen time tracker
-func NewScreenTimeTracker() *ScreenTimeTracker {
+// NewScreenTimeTracker creates a new screen time tracker with repository dependency
+func NewScreenTimeTracker(repo repository.UsageRepository, logger logging.Logger) *ScreenTimeTracker {
+	if logger == nil {
+		logger = logging.NewDefaultLogger()
+	}
+
+	now := time.Now()
 	return &ScreenTimeTracker{
-		usageData:    make(map[string]int64),
-		appInfoCache: make(map[string]*platform.AppInfo),
-		startTime:    time.Now(),
-		stopTracking: make(chan bool),
-		windowAPI:    platform.NewWindowAPI(),
+		usageData:          make(map[string]int64),
+		appInfoCache:       make(map[string]*platform.AppInfo),
+		startTime:          now,
+		stopTracking:       make(chan bool),
+		windowAPI:          platform.NewWindowAPI(),
+		repository:         repo,
+		logger:             logger,
+		currentDate:        time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
+		persistenceEnabled: true, // Default to enabled
 	}
 }
 
 // Start begins the background tracking process
 func (st *ScreenTimeTracker) Start() {
+	// Load existing data for today
+	st.loadTodaysData()
+
+	// Start tracking loop
 	go st.trackingLoop()
+
+	// Start persistence loop (every 30 seconds)
+	st.startPersistenceLoop()
 }
 
 // Stop stops the tracking process
 func (st *ScreenTimeTracker) Stop() {
+	// Stop persistence ticker
+	if st.persistTicker != nil {
+		st.persistTicker.Stop()
+	}
+
+	// Persist final data before stopping
+	st.persistCurrentData()
+
+	// Stop tracking
 	select {
 	case st.stopTracking <- true:
 	default:
@@ -125,25 +159,9 @@ func (st *ScreenTimeTracker) GetUsageData() *types.UsageData {
 	}
 }
 
-// ResetUsageData resets the usage data
-func (st *ScreenTimeTracker) ResetUsageData() {
-	st.mutex.Lock()
-	defer st.mutex.Unlock()
-
-	st.usageData = make(map[string]int64)
-	st.appInfoCache = make(map[string]*platform.AppInfo)
-	st.startTime = time.Now()
-	st.lastTime = time.Time{}
-	st.lastApp = ""
-}
-
 // sortAppsByDuration sorts apps by duration in descending order
 func (st *ScreenTimeTracker) sortAppsByDuration(apps []types.AppUsage) {
-	for i := 0; i < len(apps)-1; i++ {
-		for j := i + 1; j < len(apps); j++ {
-			if apps[i].Duration < apps[j].Duration {
-				apps[i], apps[j] = apps[j], apps[i]
-			}
-		}
-	}
+	sort.Slice(apps, func(i, j int) bool {
+		return apps[i].Duration > apps[j].Duration
+	})
 }

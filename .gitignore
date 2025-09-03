@@ -155,11 +155,10 @@ wails.json.bak
 *.db
 *.sqlite
 *.sqlite3
-
-# Test files
-*_test.go
-test/
-tests/
+*.sqlite3-journal
+*.db-journal
+*.db-wal
+*.db-shm
 
 # Backup files
 *.bak
