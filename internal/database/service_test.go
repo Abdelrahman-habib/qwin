@@ -599,3 +599,136 @@ func TestSQLiteService_HealthCheck_DatabaseCorruption(t *testing.T) {
 		t.Logf("Health check correctly detected corruption: %v", err)
 	}
 }
+
+func TestSQLiteService_NewSQLiteService_NilLogger(t *testing.T) {
+	// Test that NewSQLiteService handles nil logger gracefully
+	service := NewSQLiteService(nil)
+	if service == nil {
+		t.Fatal("NewSQLiteService returned nil")
+	}
+	if service.logger == nil {
+		t.Fatal("NewSQLiteService should provide default logger when nil is passed")
+	}
+
+	// Test that the default logger works by connecting and logging
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test_nil_logger.db")
+
+	config := &Config{
+		Path:            dbPath,
+		MaxConnections:  4,
+		MaxIdleConns:    2,
+		JournalMode:     "WAL",
+		SynchronousMode: "NORMAL",
+		CacheSize:       -64000,
+		BusyTimeout:     5000,
+		AutoMigrate:     true,
+		MigrationsPath:  "embedded",
+	}
+
+	ctx := context.Background()
+	err := service.Connect(ctx, config)
+	if err != nil {
+		t.Fatalf("Connect failed: %v", err)
+	}
+	defer service.Close()
+
+	// This should not panic even though we passed nil logger initially
+	err = service.Health(ctx)
+	if err != nil {
+		t.Fatalf("Health check failed: %v", err)
+	}
+
+	t.Log("Nil logger handling test passed")
+}
+
+func TestSQLiteService_Optimize_Enhanced(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test_optimize.db")
+
+	config := DefaultConfig()
+	config.Path = dbPath
+	config.JournalMode = "WAL" // Use WAL mode to test wal_checkpoint
+
+	logger := logging.NewDefaultLogger()
+	service := NewSQLiteService(logger)
+	ctx := context.Background()
+
+	// Connect and migrate
+	err := service.Connect(ctx, config)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer service.Close()
+
+	err = service.Migrate(ctx)
+	if err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Add some data to make optimization meaningful
+	db := service.DB()
+	if db == nil {
+		t.Fatal("Expected non-nil database")
+	}
+
+	_, err = db.ExecContext(ctx, `INSERT INTO daily_usage (date, total_time) VALUES ('2024-01-01', 3600)`)
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+
+	// Run optimization - should not fail even with new WAL checkpoint and PRAGMA optimize
+	err = service.Optimize(ctx)
+	if err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	// Verify the database is still healthy after optimization
+	err = service.Health(ctx)
+	if err != nil {
+		t.Fatalf("Health check failed after optimization: %v", err)
+	}
+
+	t.Log("Enhanced optimization test passed")
+}
+
+func TestSQLiteService_Optimize_WithNonWALMode(t *testing.T) {
+	t.Parallel()
+	tempDir := t.TempDir()
+	dbPath := filepath.Join(tempDir, "test_optimize_delete.db")
+
+	config := DefaultConfig()
+	config.Path = dbPath
+	config.JournalMode = "DELETE" // Non-WAL mode
+
+	logger := logging.NewDefaultLogger()
+	service := NewSQLiteService(logger)
+	ctx := context.Background()
+
+	// Connect and migrate
+	err := service.Connect(ctx, config)
+	if err != nil {
+		t.Fatalf("Failed to connect: %v", err)
+	}
+	defer service.Close()
+
+	err = service.Migrate(ctx)
+	if err != nil {
+		t.Fatalf("Failed to migrate: %v", err)
+	}
+
+	// Run optimization - WAL checkpoint should be ignored, PRAGMA optimize should still work
+	err = service.Optimize(ctx)
+	if err != nil {
+		t.Fatalf("Optimize failed: %v", err)
+	}
+
+	// Verify the database is still healthy after optimization
+	err = service.Health(ctx)
+	if err != nil {
+		t.Fatalf("Health check failed after optimization: %v", err)
+	}
+
+	t.Log("Non-WAL optimization test passed")
+}

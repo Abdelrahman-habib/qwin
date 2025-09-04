@@ -33,6 +33,9 @@ type SQLiteService struct {
 
 // NewSQLiteService creates a new SQLite database service
 func NewSQLiteService(logger logging.Logger) *SQLiteService {
+	if logger == nil {
+		logger = logging.NewDefaultLogger()
+	}
 	return &SQLiteService{
 		logger: logger,
 	}
@@ -262,11 +265,21 @@ func (s *SQLiteService) Optimize(ctx context.Context) error {
 		})
 	}
 
+	// Best-effort WAL checkpoint to trim .wal (ignored on non-WAL)
+	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil && s.logger != nil {
+		s.logger.Warn("wal_checkpoint failed", "error", err)
+	}
+
 	// Run VACUUM to reclaim space and defragment
 	if _, err := s.db.ExecContext(ctx, "VACUUM"); err != nil {
 		return dberrors.WrapDatabaseErrorWithContext("Optimize", err, map[string]string{
 			"phase": "vacuum",
 		})
+	}
+
+	// Let SQLite apply additional internal optimizations (no-op if unsupported)
+	if _, err := s.db.ExecContext(ctx, "PRAGMA optimize"); err != nil && s.logger != nil {
+		s.logger.Warn("PRAGMA optimize failed", "error", err)
 	}
 
 	s.logger.Info("Database optimization completed")

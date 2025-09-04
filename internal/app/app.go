@@ -97,8 +97,8 @@ func (a *App) initializeDatabase(ctx context.Context) error {
 	defer cancel()
 
 	if err := a.dbService.Health(healthCtx); err != nil {
-		// Try to reconnect if health check fails
-		if errors.IsConnection(err) {
+		// Try to reconnect if health check fails, but not for schema errors
+		if errors.IsRetryable(err) {
 			if reconnectErr := a.reconnectDatabase(ctx); reconnectErr != nil {
 				return reconnectErr
 			}

@@ -3,6 +3,7 @@ package errors
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -26,6 +27,7 @@ const (
 	ErrCodeCorruption
 	ErrCodeInternal
 	ErrCodeBusy
+	ErrCodeSchema
 )
 
 // String returns a string representation of the error code
@@ -59,6 +61,8 @@ func (e ErrorCode) String() string {
 		return "INTERNAL"
 	case ErrCodeBusy:
 		return "BUSY"
+	case ErrCodeSchema:
+		return "SCHEMA"
 	default:
 		return "UNKNOWN"
 	}
@@ -75,6 +79,11 @@ type RepositoryError struct {
 }
 
 func (e *RepositoryError) Error() string {
+	// Guard against nil receiver
+	if e == nil {
+		return "repository error"
+	}
+
 	var parts []string
 
 	if e.Op != "" {
@@ -89,9 +98,18 @@ func (e *RepositoryError) Error() string {
 		parts = append(parts, "retryable=true")
 	}
 
-	if len(e.Context) > 0 {
-		for k, v := range e.Context {
-			parts = append(parts, fmt.Sprintf("%s=%s", k, v))
+	// Add context with deterministic order (treat nil Context as empty)
+	if e.Context != nil && len(e.Context) > 0 {
+		// Collect keys and sort them for deterministic output
+		keys := make([]string, 0, len(e.Context))
+		for k := range e.Context {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+
+		// Append key=value pairs in sorted order
+		for _, k := range keys {
+			parts = append(parts, fmt.Sprintf("%s=%s", k, e.Context[k]))
 		}
 	}
 
@@ -107,11 +125,17 @@ func (e *RepositoryError) Error() string {
 }
 
 func (e *RepositoryError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
 	return e.Err
 }
 
 // Is implements error matching for errors.Is
 func (e *RepositoryError) Is(target error) bool {
+	if e == nil {
+		return false
+	}
 	if t, ok := target.(*RepositoryError); ok {
 		return e.Code == t.Code
 	}
@@ -124,16 +148,25 @@ func (e *RepositoryError) Is(target error) bool {
 
 // IsRetryable returns whether the error is retryable
 func (e *RepositoryError) IsRetryable() bool {
+	if e == nil {
+		return false
+	}
 	return e.Retryable
 }
 
 // GetCode returns the error code as a string (for logging interface compatibility)
 func (e *RepositoryError) GetCode() string {
+	if e == nil {
+		return ""
+	}
 	return e.Code.String()
 }
 
 // GetContext returns the error context (for logging interface compatibility)
 func (e *RepositoryError) GetContext() map[string]string {
+	if e == nil {
+		return make(map[string]string)
+	}
 	if e.Context == nil {
 		return make(map[string]string)
 	}
@@ -142,10 +175,16 @@ func (e *RepositoryError) GetContext() map[string]string {
 
 // GetTimestamp returns the error timestamp (for logging interface compatibility)
 func (e *RepositoryError) GetTimestamp() time.Time {
+	if e == nil {
+		return time.Time{}
+	}
 	return e.Timestamp
 }
 
-// WithContext adds context information to the error
+// WithContext adds context information to the error by mutating the receiver.
+// This method is not concurrency-safe and should not be used after the error
+// has been published to other goroutines without proper synchronization.
+// For concurrent usage, create a new error with NewRepositoryErrorWithContext instead.
 func (e *RepositoryError) WithContext(key, value string) *RepositoryError {
 	if e.Context == nil {
 		e.Context = make(map[string]string)
@@ -170,7 +209,11 @@ func NewRepositoryError(op string, err error, code ErrorCode) *RepositoryError {
 func NewRepositoryErrorWithContext(op string, err error, code ErrorCode, context map[string]string) *RepositoryError {
 	repoErr := NewRepositoryError(op, err, code)
 	if context != nil {
-		repoErr.Context = context
+		// Clone the context map to avoid external mutation and data races
+		repoErr.Context = make(map[string]string, len(context))
+		for k, v := range context {
+			repoErr.Context[k] = v
+		}
 	}
 	return repoErr
 }
@@ -193,7 +236,7 @@ func isRetryableError(code ErrorCode, err error) bool {
 		return true
 	case ErrCodeNonRetryable:
 		return false
-	case ErrCodeNotFound, ErrCodeDuplicate, ErrCodeConstraint, ErrCodeValidation, ErrCodePermission, ErrCodeCorruption, ErrCodeInternal:
+	case ErrCodeNotFound, ErrCodeDuplicate, ErrCodeConstraint, ErrCodeValidation, ErrCodePermission, ErrCodeCorruption, ErrCodeInternal, ErrCodeSchema:
 		return false
 	case ErrCodeDiskSpace:
 		// Disk space errors are non-retryable by default as they require external intervention
@@ -205,7 +248,9 @@ func isRetryableError(code ErrorCode, err error) bool {
 			errStr := strings.ToLower(err.Error())
 			return strings.Contains(errStr, "temporary") ||
 				strings.Contains(errStr, "retry") ||
-				strings.Contains(errStr, "busy")
+				strings.Contains(errStr, "busy") ||
+				strings.Contains(errStr, "locked") ||
+				strings.Contains(errStr, "deadlock")
 		}
 		return false
 	}
@@ -326,6 +371,15 @@ func IsBusy(err error) bool {
 	var repoErr *RepositoryError
 	if errors.As(err, &repoErr) {
 		return repoErr.Code == ErrCodeBusy
+	}
+	return false
+}
+
+// IsSchema checks if the error is a schema error
+func IsSchema(err error) bool {
+	var repoErr *RepositoryError
+	if errors.As(err, &repoErr) {
+		return repoErr.Code == ErrCodeSchema
 	}
 	return false
 }

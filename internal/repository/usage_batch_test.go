@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,9 @@ func TestSQLiteRepository_BatchProcessAppUsage(t *testing.T) {
 	if err == nil {
 		t.Error("BatchProcessAppUsage with insert-only should fail on duplicate")
 	}
+	if err != nil && !repoerrors.IsDuplicate(err) && !repoerrors.IsConstraint(err) {
+		t.Errorf("Expected duplicate/constraint classification, got: %v", err)
+	}
 
 	// Test batch insert-only strategy with new app (should succeed)
 	newAppUsages := []types.AppUsage{
@@ -67,6 +71,11 @@ func TestSQLiteRepository_BatchProcessAppUsage(t *testing.T) {
 
 	if len(retrievedApps2) != 4 {
 		t.Errorf("Expected 4 apps after insert-only, got %d", len(retrievedApps2))
+	}
+	for _, a := range retrievedApps2 {
+		if a.Name == "BatchApp1" && a.Duration != 1800 {
+			t.Errorf("Insert-only must not modify existing app; got duration=%d", a.Duration)
+		}
 	}
 
 	// Test with empty slice (should not error)
@@ -246,6 +255,9 @@ func TestSQLiteRepository_BatchIncrementAppUsageDurations(t *testing.T) {
 	}
 	if !repoerrors.IsValidation(err) {
 		t.Errorf("Expected validation error for overflow, got: %v", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "overflow") {
+		t.Errorf("Expected error message to mention overflow, got: %v", err)
 	}
 
 	// Test insert-on-missing behavior: increment non-existent app should create it

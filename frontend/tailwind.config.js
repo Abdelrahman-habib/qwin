@@ -9,6 +9,7 @@ export default {
       fontFamily: {
         sans: [
           "app",
+          "ui-sans-serif",
           "system-ui",
           "-apple-system",
           '"Segoe UI"',

@@ -63,6 +63,22 @@ func TestClassifySQLiteError(t *testing.T) {
 			expected: ErrCodeConstraint,
 		},
 		{
+			name: "trigger constraint violation",
+			err: sqlite3.Error{
+				Code:         sqlite3.ErrConstraint,
+				ExtendedCode: sqlite3.ErrConstraintTrigger,
+			},
+			expected: ErrCodeConstraint,
+		},
+		{
+			name: "rowid constraint violation",
+			err: sqlite3.Error{
+				Code:         sqlite3.ErrConstraint,
+				ExtendedCode: sqlite3.ErrConstraintRowID,
+			},
+			expected: ErrCodeConstraint,
+		},
+		{
 			name: "generic constraint with unique in message",
 			err: sqlite3.Error{
 				Code:         sqlite3.ErrConstraint,
@@ -117,7 +133,7 @@ func TestClassifySQLiteError(t *testing.T) {
 			err: sqlite3.Error{
 				Code: sqlite3.ErrSchema,
 			},
-			expected: ErrCodeConnection,
+			expected: ErrCodeSchema,
 		},
 		{
 			name: "unknown sqlite error",

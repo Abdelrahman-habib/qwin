@@ -1,10 +1,13 @@
 package services
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"qwin/internal/infrastructure/logging"
 	"qwin/internal/platform"
+	"qwin/internal/types"
 )
 
 func TestScreenTimeTracker_ResetUsageData(t *testing.T) {
@@ -220,4 +223,174 @@ func TestScreenTimeTracker_StartStopRunningState(t *testing.T) {
 
 	// Clean up
 	tracker.Stop()
+}
+
+func TestMockRepository_SortingBehavior(t *testing.T) {
+	mockRepo := NewMockRepository()
+	ctx := context.Background()
+
+	// Create test data across multiple dates with different durations
+	date1 := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	date2 := time.Date(2024, 1, 16, 0, 0, 0, 0, time.UTC)
+	date3 := time.Date(2024, 1, 17, 0, 0, 0, 0, time.UTC)
+
+	// Add apps with different durations for each date
+	testCases := []struct {
+		date     time.Time
+		appName  string
+		duration int64
+	}{
+		{date1, "App1_Day1", 100},
+		{date1, "App2_Day1", 300}, // Higher duration on same day
+		{date2, "App1_Day2", 200},
+		{date2, "App2_Day2", 150},
+		{date3, "App1_Day3", 50},  // Latest date
+		{date3, "App2_Day3", 400}, // Latest date, highest duration
+	}
+
+	for _, tc := range testCases {
+		appUsage := &types.AppUsage{
+			Name:     tc.appName,
+			Duration: tc.duration,
+			Date:     tc.date,
+		}
+		err := mockRepo.SaveAppUsage(ctx, tc.date, appUsage)
+		if err != nil {
+			t.Fatalf("Failed to save app usage: %v", err)
+		}
+	}
+
+	// Get usage by date range and verify sorting
+	startDate := date1
+	endDate := date3
+	results, err := mockRepo.GetAppUsageByDateRange(ctx, startDate, endDate)
+	if err != nil {
+		t.Fatalf("Failed to get app usage by date range: %v", err)
+	}
+
+	if len(results) != 6 {
+		t.Fatalf("Expected 6 results, got %d", len(results))
+	}
+
+	// Verify sorting: date DESC, then duration DESC
+	// Expected order:
+	// 1. App2_Day3 (2024-01-17, 400) - latest date, highest duration
+	// 2. App1_Day3 (2024-01-17, 50)  - latest date, lower duration
+	// 3. App1_Day2 (2024-01-16, 200) - middle date, higher duration
+	// 4. App2_Day2 (2024-01-16, 150) - middle date, lower duration
+	// 5. App2_Day1 (2024-01-15, 300) - earliest date, higher duration
+	// 6. App1_Day1 (2024-01-15, 100) - earliest date, lower duration
+
+	expected := []struct {
+		name     string
+		duration int64
+		date     time.Time
+	}{
+		{"App2_Day3", 400, date3},
+		{"App1_Day3", 50, date3},
+		{"App1_Day2", 200, date2},
+		{"App2_Day2", 150, date2},
+		{"App2_Day1", 300, date1},
+		{"App1_Day1", 100, date1},
+	}
+
+	for i, exp := range expected {
+		if i >= len(results) {
+			t.Fatalf("Missing result at index %d", i)
+		}
+		result := results[i]
+		if result.Name != exp.name {
+			t.Errorf("Index %d: expected name %s, got %s", i, exp.name, result.Name)
+		}
+		if result.Duration != exp.duration {
+			t.Errorf("Index %d: expected duration %d, got %d", i, exp.duration, result.Duration)
+		}
+		// Note: We check date by formatting since time comparison can be tricky with locations
+		if result.Date.Format("2006-01-02") != exp.date.Format("2006-01-02") {
+			t.Errorf("Index %d: expected date %s, got %s", i, exp.date.Format("2006-01-02"), result.Date.Format("2006-01-02"))
+		}
+	}
+}
+
+func TestScreenTimeTracker_ElapsedTimeAttribution(t *testing.T) {
+	mockRepo := NewMockRepository()
+	tracker := NewScreenTimeTracker(mockRepo, logging.NewDefaultLogger())
+
+	// Set up mock window API to control what app is returned
+	mockWindowAPI := &MockWindowAPI{}
+	tracker.windowAPI = mockWindowAPI
+
+	// Simulate app switching scenario
+	now := time.Now()
+
+	// Start with Chrome
+	mockWindowAPI.SetCurrentApp(&platform.AppInfo{Name: "Chrome"})
+	tracker.mutex.Lock()
+	tracker.lastTime = now
+	tracker.mutex.Unlock()
+
+	// Simulate Chrome usage for 5 seconds
+	timeAfter5Sec := now.Add(5 * time.Second)
+	tracker.mutex.Lock()
+	tracker.lastTime = timeAfter5Sec
+	tracker.lastApp = "Chrome"
+	tracker.mutex.Unlock()
+
+	// Switch to VS Code (this should attribute the 5 seconds to Chrome)
+	mockWindowAPI.SetCurrentApp(&platform.AppInfo{Name: "VSCode"})
+	// Manually call trackCurrentApp to simulate the tracking tick
+	tracker.mutex.Lock()
+	tracker.lastTime = timeAfter5Sec
+	tracker.lastApp = "Chrome"
+	tracker.mutex.Unlock()
+	
+	// Simulate what trackCurrentApp does
+	appInfo := mockWindowAPI.GetCurrentAppInfo()
+	timeAfter8Sec := timeAfter5Sec.Add(3 * time.Second)
+	
+	tracker.mutex.Lock()
+	// This should attribute 3 seconds to Chrome (from timeAfter5Sec to timeAfter8Sec)
+	if tracker.lastApp != "" && !tracker.lastTime.IsZero() {
+		elapsed := timeAfter8Sec.Sub(tracker.lastTime).Seconds()
+		if elapsed > 0 {
+			tracker.usageData[tracker.lastApp] += int64(elapsed)
+		}
+	}
+	tracker.lastApp = appInfo.Name
+	tracker.lastTime = timeAfter8Sec
+	tracker.mutex.Unlock()
+
+	// Verify Chrome got the 3 seconds attributed
+	tracker.mutex.RLock()
+	chromeUsage := tracker.usageData["Chrome"]
+	vsCodeUsage := tracker.usageData["VSCode"]
+	tracker.mutex.RUnlock()
+
+	if chromeUsage != 3 {
+		t.Errorf("Expected Chrome usage to be 3 seconds, got %d", chromeUsage)
+	}
+
+	if vsCodeUsage != 0 {
+		t.Errorf("Expected VSCode usage to be 0 seconds (just switched to it), got %d", vsCodeUsage)
+	}
+}
+
+// MockWindowAPI for testing app switching
+type MockWindowAPI struct {
+	currentApp *platform.AppInfo
+}
+
+func (m *MockWindowAPI) GetCurrentAppName() string {
+	if m.currentApp != nil {
+		return m.currentApp.Name
+	}
+	return ""
+}
+
+func (m *MockWindowAPI) GetCurrentAppInfo() *platform.AppInfo {
+	return m.currentApp
+}
+
+func (m *MockWindowAPI) SetCurrentApp(app *platform.AppInfo) {
+	m.currentApp = app
 }

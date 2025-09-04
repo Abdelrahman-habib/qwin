@@ -100,11 +100,8 @@ func (st *ScreenTimeTracker) Stop() {
 	// Persist final data before stopping
 	st.persistCurrentData()
 
-	// Stop tracking
-	select {
-	case st.stopTracking <- true:
-	default:
-	}
+	// Stop tracking (block until trackingLoop receives the signal)
+	st.stopTracking <- true
 }
 
 // trackingLoop runs the main tracking loop
@@ -139,12 +136,15 @@ func (st *ScreenTimeTracker) trackCurrentApp() {
 		st.appInfoCache[appInfo.Name] = appInfo
 	}
 
-	// If this is the same app as before, add the elapsed time
-	if st.lastApp == appInfo.Name && !st.lastTime.IsZero() {
+	// Attribute elapsed time to the previously active app, if any
+	if st.lastApp != "" && !st.lastTime.IsZero() {
 		elapsed := now.Sub(st.lastTime).Seconds()
-		st.usageData[appInfo.Name] += int64(elapsed)
+		if elapsed > 0 {
+			st.usageData[st.lastApp] += int64(elapsed)
+		}
 	}
 
+	// Set current app as the new active app
 	st.lastApp = appInfo.Name
 	st.lastTime = now
 }

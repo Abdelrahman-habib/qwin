@@ -44,9 +44,9 @@ func ClassifyError(err error) ErrorCode {
 	case strings.Contains(errStr, "database disk image is malformed"):
 		return ErrCodeCorruption
 	case strings.Contains(errStr, "no such table"):
-		return ErrCodeConnection
+		return ErrCodeSchema
 	case strings.Contains(errStr, "no such column"):
-		return ErrCodeConnection
+		return ErrCodeSchema
 	case strings.Contains(errStr, "permission denied"):
 		return ErrCodePermission
 	case strings.Contains(errStr, "access denied"):

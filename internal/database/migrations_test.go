@@ -66,7 +66,7 @@ func TestMigrationRunner_RunMigrations_ContextCancellation(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test_cancel.db")
 
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}

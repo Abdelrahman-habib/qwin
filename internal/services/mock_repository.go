@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -173,6 +174,27 @@ func (m *MockRepository) GetAppUsageByDateRange(ctx context.Context, startDate, 
 		}
 	}
 
+	// Sort results by date DESC then duration DESC to match repository contract
+	sort.Slice(result, func(i, j int) bool {
+		// Parse dates, treating parse errors as zero time
+		dateI, errI := time.Parse("2006-01-02", result[i].Date.Format("2006-01-02"))
+		if errI != nil {
+			dateI = time.Time{}
+		}
+		dateJ, errJ := time.Parse("2006-01-02", result[j].Date.Format("2006-01-02"))
+		if errJ != nil {
+			dateJ = time.Time{}
+		}
+
+		// First sort by date DESC (newer dates come first)
+		if !dateI.Equal(dateJ) {
+			return dateI.After(dateJ)
+		}
+
+		// For equal dates, sort by Duration DESC
+		return result[i].Duration > result[j].Duration
+	})
+
 	return result, nil
 }
 
@@ -193,8 +215,10 @@ func (m *MockRepository) GetUsageHistory(ctx context.Context, days int) (map[str
 	if days <= 0 {
 		return result, nil
 	}
-	today := time.Now().In(time.Local).Truncate(24 * time.Hour)
-	earliestKey := today.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
+	// Compute local start-of-day explicitly to avoid DST drift
+	t := time.Now().In(time.Local)
+	startOfDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
+	earliestKey := startOfDay.AddDate(0, 0, -(days-1)).Format("2006-01-02")
 	for dateKey, usage := range m.dailyUsage {
 		if dateKey < earliestKey {
 			continue

@@ -26,6 +26,8 @@ func classifySQLiteError(err error) ErrorCode {
 		return ErrCodeConstraint
 	case sqlite3.ErrConstraintNotNull:
 		return ErrCodeConstraint
+	case sqlite3.ErrConstraintTrigger, sqlite3.ErrConstraintRowID:
+		return ErrCodeConstraint
 	}
 
 	// Then check base error codes for broader categories
@@ -66,9 +68,9 @@ func classifySQLiteError(err error) ErrorCode {
 		// This is a programming error, not a transient transaction failure
 		return ErrCodeInternal
 
-	// Schema errors (treated as connection issues since they indicate DB setup problems)
+	// Schema errors (indicate database schema/migration problems)
 	case sqlite3.ErrSchema:
-		return ErrCodeConnection
+		return ErrCodeSchema
 
 	default:
 		return ErrCodeUnknown
