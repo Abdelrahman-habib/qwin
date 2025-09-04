@@ -38,8 +38,8 @@ func NewScreenTimeTracker(repo repository.UsageRepository, logger logging.Logger
 
 	now := time.Now()
 	return &ScreenTimeTracker{
-		usageData:          make(map[string]int64),
-		appInfoCache:       make(map[string]*platform.AppInfo),
+		usageData:    make(map[string]int64),
+		appInfoCache: make(map[string]*platform.AppInfo),
 		// startTime will be set when Start() is called
 		stopTracking:       make(chan bool),
 		windowAPI:          platform.NewWindowAPI(),
@@ -58,13 +58,13 @@ func (st *ScreenTimeTracker) Start() {
 		st.mutex.Unlock()
 		return // Already running, avoid duplicate tracking/persistence
 	}
-	
+
 	// Initialize start time now that tracking is actually beginning
 	now := time.Now()
 	if st.startTime.IsZero() {
 		st.startTime = now
 	}
-	
+
 	// Mark as running
 	st.running = true
 	st.mutex.Unlock()
@@ -90,6 +90,7 @@ func (st *ScreenTimeTracker) Stop() {
 	st.running = false
 	ticker := st.persistTicker
 	st.persistTicker = nil
+	wasStarted := !st.startTime.IsZero()
 	st.mutex.Unlock()
 
 	// Stop persistence ticker
@@ -99,6 +100,11 @@ func (st *ScreenTimeTracker) Stop() {
 
 	// Persist final data before stopping
 	st.persistCurrentData()
+
+	// Persist final data before stopping (only if tracking was started)
+	if wasStarted {
+		st.persistCurrentData()
+	}
 
 	// Stop tracking (block until trackingLoop receives the signal)
 	st.stopTracking <- true
