@@ -50,7 +50,7 @@ func classifySQLiteError(err error) ErrorCode {
 
 	// Connection and I/O errors
 	case sqlite3.ErrBusy, sqlite3.ErrLocked:
-		return ErrCodeConnection
+		return ErrCodeBusy
 	case sqlite3.ErrCantOpen:
 		return ErrCodeConnection
 	case sqlite3.ErrIoErr:
@@ -60,10 +60,11 @@ func classifySQLiteError(err error) ErrorCode {
 	case sqlite3.ErrFull:
 		return ErrCodeDiskSpace
 
-	// Transaction errors
+	// API misuse errors
 	case sqlite3.ErrMisuse:
-		// Often indicates transaction/threading issues
-		return ErrCodeTransaction
+		// Indicates incorrect API usage (e.g., calling prepared statement after finalizing)
+		// This is a programming error, not a transient transaction failure
+		return ErrCodeInternal
 
 	// Schema errors (treated as connection issues since they indicate DB setup problems)
 	case sqlite3.ErrSchema:

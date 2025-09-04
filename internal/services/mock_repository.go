@@ -189,9 +189,16 @@ func (m *MockRepository) GetUsageHistory(ctx context.Context, days int) (map[str
 
 	result := make(map[string]*types.UsageData)
 
-	// Return all available data (for testing purposes)
-	// In a real implementation, this would filter by date range
+	// Filter by the last N days (inclusive of today) using YYYY-MM-DD string compare to avoid TZ skew
+	if days <= 0 {
+		return result, nil
+	}
+	today := time.Now().In(time.Local).Truncate(24 * time.Hour)
+	earliestKey := today.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 	for dateKey, usage := range m.dailyUsage {
+		if dateKey < earliestKey {
+			continue
+		}
 		result[dateKey] = &types.UsageData{
 			TotalTime: usage.TotalTime,
 			Apps:      make([]types.AppUsage, len(usage.Apps)),
@@ -314,12 +321,23 @@ func (m *MockRepository) GetAppUsageByDateRangePaginated(ctx context.Context, st
 		return nil, err
 	}
 
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	total := len(allApps)
 
-	// Apply pagination
+	// Validate and clamp pagination parameters
+	// Ensure offset is not negative
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Return empty result if limit is <= 0
+	if limit <= 0 {
+		return &types.PaginatedAppUsageResult{
+			Results: []types.AppUsage{},
+			Total:   total,
+		}, nil
+	}
+
+	// Apply pagination with bounds checking
 	start := offset
 	if start >= len(allApps) {
 		return &types.PaginatedAppUsageResult{

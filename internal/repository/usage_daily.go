@@ -25,6 +25,16 @@ func (r *SQLiteRepository) SaveDailyUsage(ctx context.Context, date time.Time, u
 		return err
 	}
 
+	// Validate usage data fields
+	if usage.TotalTime < 0 {
+		err := repoerrors.NewRepositoryError("SaveDailyUsage", fmt.Errorf("total time is negative: %d", usage.TotalTime), repoerrors.ErrCodeValidation)
+		logging.LogError(r.logger, err, "SaveDailyUsage", map[string]any{
+			"date":       date.Format("2006-01-02"),
+			"total_time": usage.TotalTime,
+		})
+		return err
+	}
+
 	// Normalize date to start of day
 	normalizedDate := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 

@@ -63,6 +63,10 @@ func withRetryImpl(ctx context.Context, config *RetryConfig, operation Retryable
 		config = DefaultRetryConfig()
 	}
 
+	if config.MaxAttempts < 1 {
+		config.MaxAttempts = 1
+	}
+
 	var lastErr error
 
 	for attempt := 0; attempt < config.MaxAttempts; attempt++ {
@@ -135,7 +139,7 @@ func shouldRetry(err error, config *RetryConfig) bool {
 	}
 
 	// Check if error is generally retryable
-	if !repoErr.IsRetryable() {
+	if !IsRetryable(err) {
 		return false
 	}
 

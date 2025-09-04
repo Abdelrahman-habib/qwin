@@ -174,3 +174,6 @@ wails.json.bak
 config.local.*
 settings.local.*
 
+# Warp Agent configuration
+WARP.md
+

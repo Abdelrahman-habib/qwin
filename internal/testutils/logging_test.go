@@ -1,6 +1,7 @@
 package testutils
 
 import (
+	"fmt"
 	"testing"
 )
 
@@ -106,6 +107,6 @@ type mockTestingT struct {
 
 func (m *mockTestingT) Errorf(format string, args ...any) {
 	if m.errorFunc != nil {
-		m.errorFunc(format)
+		m.errorFunc(fmt.Sprintf(format, args...))
 	}
 }

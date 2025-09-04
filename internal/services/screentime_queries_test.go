@@ -13,9 +13,9 @@ import (
 func TestScreenTimeTracker_HistoricalUsage(t *testing.T) {
 	mockRepo := NewMockRepository()
 
-	// Pre-populate with historical data using fixed base time
+	// Pre-populate with historical data using recent dates
 	ctx := context.Background()
-	baseTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	baseTime := time.Now().Truncate(24 * time.Hour) // Use current date as base
 	for i := 0; i < 7; i++ {
 		date := baseTime.AddDate(0, 0, -i)
 		usage := &types.UsageData{

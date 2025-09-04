@@ -21,7 +21,7 @@ func TestClassifyError(t *testing.T) {
 		{"foreign key constraint", errors.New("FOREIGN KEY constraint failed"), ErrCodeConstraint},
 		{"check constraint", errors.New("CHECK constraint failed"), ErrCodeConstraint},
 		{"not null constraint", errors.New("NOT NULL constraint failed"), ErrCodeConstraint},
-		{"database locked", errors.New("database is locked"), ErrCodeConnection},
+		{"database locked", errors.New("database is locked"), ErrCodeBusy},
 		{"database corruption", errors.New("database disk image is malformed"), ErrCodeCorruption},
 		{"no such table", errors.New("no such table: users"), ErrCodeConnection},
 		{"no such column", errors.New("no such column: name"), ErrCodeConnection},
@@ -66,7 +66,7 @@ func TestClassifyError_StringFallback(t *testing.T) {
 		{
 			name:     "Generic error with database locked message",
 			err:      errors.New("database is locked"),
-			expected: ErrCodeConnection,
+			expected: ErrCodeBusy,
 		},
 	}
 

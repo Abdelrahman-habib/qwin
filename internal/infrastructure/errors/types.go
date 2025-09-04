@@ -24,6 +24,8 @@ const (
 	ErrCodePermission
 	ErrCodeDiskSpace
 	ErrCodeCorruption
+	ErrCodeInternal
+	ErrCodeBusy
 )
 
 // String returns a string representation of the error code
@@ -53,6 +55,10 @@ func (e ErrorCode) String() string {
 		return "DISK_SPACE"
 	case ErrCodeCorruption:
 		return "CORRUPTION"
+	case ErrCodeInternal:
+		return "INTERNAL"
+	case ErrCodeBusy:
+		return "BUSY"
 	default:
 		return "UNKNOWN"
 	}
@@ -181,13 +187,13 @@ func isDiskSpaceRetryable() bool {
 // isRetryableError determines if an error is retryable based on its type
 func isRetryableError(code ErrorCode, err error) bool {
 	switch code {
-	case ErrCodeConnection, ErrCodeTimeout, ErrCodeTransaction:
+	case ErrCodeConnection, ErrCodeTimeout, ErrCodeTransaction, ErrCodeBusy:
 		return true
 	case ErrCodeRetryable:
 		return true
 	case ErrCodeNonRetryable:
 		return false
-	case ErrCodeNotFound, ErrCodeDuplicate, ErrCodeConstraint, ErrCodeValidation, ErrCodePermission, ErrCodeCorruption:
+	case ErrCodeNotFound, ErrCodeDuplicate, ErrCodeConstraint, ErrCodeValidation, ErrCodePermission, ErrCodeCorruption, ErrCodeInternal:
 		return false
 	case ErrCodeDiskSpace:
 		// Disk space errors are non-retryable by default as they require external intervention
@@ -302,6 +308,24 @@ func IsCorruption(err error) bool {
 	var repoErr *RepositoryError
 	if errors.As(err, &repoErr) {
 		return repoErr.Code == ErrCodeCorruption
+	}
+	return false
+}
+
+// IsInternal checks if the error is an internal/API misuse error
+func IsInternal(err error) bool {
+	var repoErr *RepositoryError
+	if errors.As(err, &repoErr) {
+		return repoErr.Code == ErrCodeInternal
+	}
+	return false
+}
+
+// IsBusy checks if the error is a busy/locked error
+func IsBusy(err error) bool {
+	var repoErr *RepositoryError
+	if errors.As(err, &repoErr) {
+		return repoErr.Code == ErrCodeBusy
 	}
 	return false
 }

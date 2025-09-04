@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	queries "qwin/internal/database/generated"
@@ -20,6 +21,36 @@ func (r *SQLiteRepository) SaveAppUsage(ctx context.Context, date time.Time, app
 		logging.LogError(r.logger, err, "SaveAppUsage", map[string]interface{}{
 			"date": date.Format("2006-01-02"),
 		})
+		return err
+	}
+
+	// Validate app usage fields
+	// Build shared context for validation errors
+	validationContext := map[string]string{
+		"date":     date.Format("2006-01-02"),
+		"app_name": appUsage.Name,
+		"duration": fmt.Sprintf("%d", appUsage.Duration),
+	}
+	
+	if strings.TrimSpace(appUsage.Name) == "" {
+		err := repoerrors.NewRepositoryErrorWithContext("SaveAppUsage", fmt.Errorf("app name is empty or whitespace"), repoerrors.ErrCodeValidation, validationContext)
+		// Convert context to interface{} map for logging
+		logContext := make(map[string]interface{}, len(validationContext))
+		for k, v := range validationContext {
+			logContext[k] = v
+		}
+		logging.LogError(r.logger, err, "SaveAppUsage", logContext)
+		return err
+	}
+
+	if appUsage.Duration < 0 {
+		err := repoerrors.NewRepositoryErrorWithContext("SaveAppUsage", fmt.Errorf("app duration is negative: %d", appUsage.Duration), repoerrors.ErrCodeValidation, validationContext)
+		// Convert context to interface{} map for logging
+		logContext := make(map[string]interface{}, len(validationContext))
+		for k, v := range validationContext {
+			logContext[k] = v
+		}
+		logging.LogError(r.logger, err, "SaveAppUsage", logContext)
 		return err
 	}
 
@@ -90,7 +121,9 @@ func (r *SQLiteRepository) GetAppUsageByDate(ctx context.Context, date time.Time
 	return apps, nil
 }
 
-// GetAppUsageByDateRange retrieves application usage data for a date range
+// GetAppUsageByDateRange retrieves application usage data for a date range.
+// Results are ordered by date descending (newest first) and then by duration descending.
+// Both start and end date bounds are inclusive.
 func (r *SQLiteRepository) GetAppUsageByDateRange(ctx context.Context, startDate, endDate time.Time) ([]types.AppUsage, error) {
 	// Normalize dates
 	normalizedStart := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())

@@ -278,7 +278,7 @@ func TestCalculateDelay_WithJitter(t *testing.T) {
 		Jitter:        true,
 	}
 
-	// Test that jitter adds some variation within ±25%
+	// Test that jitter adds some variation within 0-25% (positive jitter only)
 	baseDelay := calculateDelay(0, &RetryConfig{
 		InitialDelay:  100 * time.Millisecond,
 		MaxDelay:      1 * time.Second,
@@ -288,18 +288,13 @@ func TestCalculateDelay_WithJitter(t *testing.T) {
 
 	jitteredDelay := calculateDelay(0, config)
 
-	// Calculate bounds for ±25% variability
-	lowerBound := baseDelay - time.Duration(float64(baseDelay)*0.25)
+	// Calculate bounds for 0-25% positive jitter
+	lowerBound := baseDelay
 	upperBound := baseDelay + time.Duration(float64(baseDelay)*0.25)
 
-	// Ensure lowerBound is not negative
-	if lowerBound < 0 {
-		lowerBound = 0
-	}
-
-	// Jittered delay should be within ±25% of base delay
+	// Jittered delay should be within baseDelay to baseDelay + 25%
 	if jitteredDelay < lowerBound {
-		t.Errorf("Jittered delay %v should be >= lower bound %v", jitteredDelay, lowerBound)
+		t.Errorf("Jittered delay %v should be >= base delay %v", jitteredDelay, lowerBound)
 	}
 	if jitteredDelay > upperBound {
 		t.Errorf("Jittered delay %v should be <= upper bound %v", jitteredDelay, upperBound)

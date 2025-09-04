@@ -13,7 +13,7 @@ import (
 
 const batchUpdateAppUsage = `-- name: BatchUpdateAppUsage :exec
 UPDATE app_usage
-SET duration = duration + ?, updated_at = CURRENT_TIMESTAMP
+SET duration = max(0, duration + ?), updated_at = CURRENT_TIMESTAMP
 WHERE name = ? AND date = ?
 `
 
@@ -216,7 +216,7 @@ func (q *Queries) GetAppUsageByDateRange(ctx context.Context, arg GetAppUsageByD
 const getAppUsageByDateRangePaginated = `-- name: GetAppUsageByDateRangePaginated :many
 SELECT id, name, duration, icon_path, exe_path, date, created_at, updated_at FROM app_usage
 WHERE date >= ? AND date <= ?
-ORDER BY date DESC, duration DESC
+ORDER BY date DESC, duration DESC, id DESC
 LIMIT ? OFFSET ?
 `
 

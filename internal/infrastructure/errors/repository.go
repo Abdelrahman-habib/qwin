@@ -40,7 +40,7 @@ func ClassifyError(err error) ErrorCode {
 	case strings.Contains(errStr, "not null constraint"):
 		return ErrCodeConstraint
 	case strings.Contains(errStr, "database is locked"):
-		return ErrCodeConnection
+		return ErrCodeBusy
 	case strings.Contains(errStr, "database disk image is malformed"):
 		return ErrCodeCorruption
 	case strings.Contains(errStr, "no such table"):

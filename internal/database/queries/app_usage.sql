@@ -80,7 +80,7 @@ VALUES (?, ?, ?, ?, ?);
 
 -- name: BatchUpdateAppUsage :exec
 UPDATE app_usage
-SET duration = duration + ?, updated_at = CURRENT_TIMESTAMP
+SET duration = max(0, duration + ?), updated_at = CURRENT_TIMESTAMP
 WHERE name = ? AND date = ?;
 
 -- name: GetAllAppsForDate :many
@@ -114,7 +114,7 @@ ORDER BY date DESC;
 -- name: GetAppUsageByDateRangePaginated :many
 SELECT * FROM app_usage
 WHERE date >= ? AND date <= ?
-ORDER BY date DESC, duration DESC
+ORDER BY date DESC, duration DESC, id DESC
 LIMIT ? OFFSET ?;
 
 -- name: GetAppUsageCountByDateRange :one

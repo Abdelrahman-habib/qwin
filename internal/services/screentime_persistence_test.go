@@ -39,9 +39,11 @@ func TestScreenTimeTracker_DataPersistence(t *testing.T) {
 func TestScreenTimeTracker_DataLoading(t *testing.T) {
 	mockRepo := NewMockRepository()
 
-	// Pre-populate mock repository with test data using today's date
-	now := time.Now()
-	testDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	// Create tracker first to establish the current date
+	tracker := NewScreenTimeTracker(mockRepo, logging.NewDefaultLogger())
+
+	// Use tracker's current date to seed mock repository with test data
+	testDate := tracker.CurrentDate()
 	testUsage := &types.UsageData{
 		TotalTime: 7200, // 2 hours
 		Apps: []types.AppUsage{
@@ -56,8 +58,7 @@ func TestScreenTimeTracker_DataLoading(t *testing.T) {
 		mockRepo.SaveAppUsage(ctx, testDate, &testUsage.Apps[i])
 	}
 
-	// Create tracker and trigger data loading
-	tracker := NewScreenTimeTracker(mockRepo, logging.NewDefaultLogger())
+	// Now trigger data loading
 	tracker.loadTodaysData()
 
 	// Verify data was loaded

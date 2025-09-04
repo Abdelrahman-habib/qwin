@@ -5,12 +5,18 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	queries "qwin/internal/database/generated"
 	repoerrors "qwin/internal/infrastructure/errors"
 	"qwin/internal/infrastructure/logging"
 	"qwin/internal/types"
+)
+
+// Package-level errors
+var (
+	ErrInvalidBatchSize = errors.New("invalid batch size")
 )
 
 // BatchProcessAppUsage processes multiple application usage records with specified strategy
@@ -22,6 +28,16 @@ func (r *SQLiteRepository) BatchProcessAppUsage(ctx context.Context, date time.T
 // If batchSize is 0, uses the configured default batch size calculation
 func (r *SQLiteRepository) BatchProcessAppUsageWithBatchSize(ctx context.Context, date time.Time, appUsages []types.AppUsage, strategy types.BatchStrategy, batchSize int) error {
 	start := time.Now()
+
+	// Validate batch size to prevent undefined behavior/infinite loops
+	if batchSize < 0 {
+		err := repoerrors.NewRepositoryError("BatchProcessAppUsageWithBatchSize", ErrInvalidBatchSize, repoerrors.ErrCodeValidation)
+		logging.LogError(r.logger, err, "BatchProcessAppUsageWithBatchSize", map[string]interface{}{
+			"batch_size": batchSize,
+			"date":       date.Format("2006-01-02"),
+		})
+		return err
+	}
 
 	if len(appUsages) == 0 {
 		return nil
@@ -169,10 +185,33 @@ func (r *SQLiteRepository) BatchIncrementAppUsageDurations(ctx context.Context, 
 				)
 			}
 
+			// If record is missing, insert instead of dropping the increment
+			if errors.Is(err, sql.ErrNoRows) {
+				if insertErr := txRepo.queries.InsertAppUsage(ctx, queries.InsertAppUsageParams{
+					Name:     appName,
+					Duration: additionalDuration,
+					IconPath: txRepo.nullStringFromString(""),
+					ExePath:  txRepo.nullStringFromString(""),
+					Date:     normalizedDate,
+				}); insertErr != nil {
+					return repoerrors.NewRepositoryErrorWithContext(
+						"BatchIncrementAppUsageDurations",
+						insertErr,
+						r.classifyError(insertErr),
+						map[string]string{
+							"app_name":            appName,
+							"date":                normalizedDate.Format("2006-01-02"),
+							"additional_duration": fmt.Sprintf("%d", additionalDuration),
+							"operation":           "InsertOnMissing",
+						},
+					)
+				}
+				continue
+			}
+
 			// Check for overflow if record exists
 			if err == nil {
-				const maxInt64 = 9223372036854775807
-				if currentApp.Duration > maxInt64-additionalDuration {
+				if currentApp.Duration > math.MaxInt64-additionalDuration {
 					return repoerrors.NewRepositoryErrorWithContext(
 						"BatchIncrementAppUsageDurations",
 						errors.New("duration increment would cause integer overflow"),
@@ -181,7 +220,7 @@ func (r *SQLiteRepository) BatchIncrementAppUsageDurations(ctx context.Context, 
 							"app_name":            appName,
 							"current_duration":    fmt.Sprintf("%d", currentApp.Duration),
 							"additional_duration": fmt.Sprintf("%d", additionalDuration),
-							"max_int64":           fmt.Sprintf("%d", maxInt64),
+							"max_int64":           fmt.Sprintf("%d", int64(math.MaxInt64)),
 						},
 					)
 				}
@@ -212,33 +251,61 @@ func (r *SQLiteRepository) BatchIncrementAppUsageDurations(ctx context.Context, 
 
 // calculateOptimalBatchSize determines the best batch size based on total items
 func (r *SQLiteRepository) calculateOptimalBatchSize(totalItems int) int {
-	if totalItems <= r.batchConfig.DefaultBatchSize {
+	// Provide safe fallback values if batchConfig is nil or has invalid values
+	defaultBatch := 100
+	maxBatch := 1000
+
+	if r.batchConfig != nil {
+		if r.batchConfig.DefaultBatchSize > 0 {
+			defaultBatch = r.batchConfig.DefaultBatchSize
+		}
+		if r.batchConfig.MaxBatchSize > 0 {
+			maxBatch = r.batchConfig.MaxBatchSize
+		}
+	}
+
+	// Clamp totalItems to reasonable bounds
+	if totalItems <= 0 {
+		return 1
+	}
+	if totalItems <= defaultBatch {
 		return totalItems
 	}
 
 	// For large datasets, use a smaller batch size to avoid long transactions
-	if totalItems > r.batchConfig.MaxBatchSize*2 {
-		return r.batchConfig.DefaultBatchSize / 2
+	if totalItems > maxBatch*2 {
+		// Ensure we don't divide by zero or get a result less than 1
+		if defaultBatch > 1 {
+			return max(defaultBatch/2, 1)
+		}
+		return 1
 	}
 
 	// For medium datasets, use default batch size
-	if totalItems > r.batchConfig.MaxBatchSize {
-		return r.batchConfig.DefaultBatchSize
+	if totalItems > maxBatch {
+		return defaultBatch
 	}
 
-	return r.batchConfig.DefaultBatchSize
+	// Clamp the result to ensure it's within bounds
+	return min(max(defaultBatch, 1), maxBatch)
 }
 
 // calculateOptimalBatchSizeWithStrategy determines batch size based on strategy and context
 func (r *SQLiteRepository) calculateOptimalBatchSizeWithStrategy(totalItems int, strategy types.BatchStrategy, ctx context.Context) int {
 	baseSize := r.calculateOptimalBatchSize(totalItems)
 
+	// Provide safe fallback values if batchConfig is nil or has invalid values
+	maxBatch := 1000
+	if r.batchConfig != nil && r.batchConfig.MaxBatchSize > 0 {
+		maxBatch = r.batchConfig.MaxBatchSize
+	}
+
 	// Adjust batch size based on strategy
 	switch strategy {
 	case types.BatchStrategyInsertOnly:
 		// Insert-only operations can handle larger batches since there's no conflict resolution
 		if totalItems > 1000 {
-			return min(baseSize*2, r.batchConfig.MaxBatchSize)
+			return min(baseSize*2, maxBatch)
 		}
 		return baseSize
 

@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"fmt"
 	"qwin/internal/infrastructure/logging"
 )
 
@@ -17,7 +18,8 @@ func NewLoggerBridge(logger logging.Logger) RetryLogger {
 // Printf implements RetryLogger interface by delegating to the logging.Logger
 func (b *LoggerBridge) Printf(format string, v ...interface{}) {
 	if b.logger != nil {
-		b.logger.Info(format, v...)
+		message := fmt.Sprintf(format, v...)
+		b.logger.Info(message)
 	}
 }
 

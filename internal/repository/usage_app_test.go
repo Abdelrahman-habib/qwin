@@ -70,6 +70,72 @@ func TestSQLiteRepository_SaveAppUsage_Validation(t *testing.T) {
 	if !repoerrors.IsValidation(err) {
 		t.Error("Expected validation error for nil app usage data")
 	}
+
+	// Test with empty app name - should embed context in error
+	empptyNameApp := &types.AppUsage{
+		Name:     " ",  // Empty/whitespace name
+		Duration: 1800,
+	}
+	err = repo.SaveAppUsage(ctx, date, empptyNameApp)
+	if err == nil {
+		t.Error("SaveAppUsage should fail with empty app name")
+	}
+
+	if !repoerrors.IsValidation(err) {
+		t.Error("Expected validation error for empty app name")
+	}
+
+	// Verify context is embedded in the error
+	if repoErr, ok := err.(*repoerrors.RepositoryError); ok {
+		if repoErr.Context == nil {
+			t.Error("Expected error context to be embedded")
+		} else {
+			if repoErr.Context["app_name"] != " " {
+				t.Errorf("Expected app_name in context to be ' ', got %v", repoErr.Context["app_name"])
+			}
+			if repoErr.Context["duration"] != "1800" {
+				t.Errorf("Expected duration in context to be '1800', got %v", repoErr.Context["duration"])
+			}
+			if repoErr.Context["date"] != "2024-01-15" {
+				t.Errorf("Expected date in context to be '2024-01-15', got %v", repoErr.Context["date"])
+			}
+		}
+	} else {
+		t.Error("Expected error to be a RepositoryError")
+	}
+
+	// Test with negative duration - should embed context in error
+	negativeDurationApp := &types.AppUsage{
+		Name:     "TestApp",
+		Duration: -500, // Negative duration
+	}
+	err = repo.SaveAppUsage(ctx, date, negativeDurationApp)
+	if err == nil {
+		t.Error("SaveAppUsage should fail with negative duration")
+	}
+
+	if !repoerrors.IsValidation(err) {
+		t.Error("Expected validation error for negative duration")
+	}
+
+	// Verify context is embedded in the error
+	if repoErr, ok := err.(*repoerrors.RepositoryError); ok {
+		if repoErr.Context == nil {
+			t.Error("Expected error context to be embedded")
+		} else {
+			if repoErr.Context["app_name"] != "TestApp" {
+				t.Errorf("Expected app_name in context to be 'TestApp', got %v", repoErr.Context["app_name"])
+			}
+			if repoErr.Context["duration"] != "-500" {
+				t.Errorf("Expected duration in context to be '-500', got %v", repoErr.Context["duration"])
+			}
+			if repoErr.Context["date"] != "2024-01-15" {
+				t.Errorf("Expected date in context to be '2024-01-15', got %v", repoErr.Context["date"])
+			}
+		}
+	} else {
+		t.Error("Expected error to be a RepositoryError")
+	}
 }
 
 func TestSQLiteRepository_GetAppUsageByDateRange(t *testing.T) {

@@ -19,6 +19,10 @@ func (st *ScreenTimeTracker) startPersistenceLoop() {
 			case <-st.persistTicker.C:
 				st.persistCurrentData()
 			case <-st.stopTracking:
+				// Stop the ticker to prevent timer leak
+				if st.persistTicker != nil {
+					st.persistTicker.Stop()
+				}
 				return
 			}
 		}
@@ -56,8 +60,32 @@ func (st *ScreenTimeTracker) persistCurrentData() {
 
 // persistDataForDate saves usage data for a specific date
 func (st *ScreenTimeTracker) persistDataForDate(ctx context.Context, date time.Time) {
-	// Calculate total time
-	totalTime := int64(time.Since(st.startTime).Seconds())
+	// Calculate total time bounded to the target date to prevent midnight rollover corruption
+	var totalTime int64
+	if !st.startTime.IsZero() {
+		// Calculate start and end boundaries of the target date
+		startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
+		endOfDay := time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
+		
+		// Clamp the time interval to the target date boundaries
+		start := st.startTime
+		if start.Before(startOfDay) {
+			start = startOfDay
+		}
+		
+		end := time.Now()
+		if end.After(endOfDay) {
+			end = endOfDay
+		}
+		
+		// Calculate elapsed time only within the target date boundaries
+		if end.After(start) {
+			totalTime = int64(end.Sub(start).Seconds())
+		} else {
+			totalTime = 0 // Clamp negatives to 0
+		}
+	}
+	// If startTime is zero (Start() not called), totalTime remains 0
 
 	// Save daily usage summary
 	usageData := &types.UsageData{

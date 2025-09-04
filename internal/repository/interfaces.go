@@ -16,6 +16,9 @@ type UsageRepository interface {
 	// Application usage operations
 	SaveAppUsage(ctx context.Context, date time.Time, appUsage *types.AppUsage) error
 	GetAppUsageByDate(ctx context.Context, date time.Time) ([]types.AppUsage, error)
+	// GetAppUsageByDateRange retrieves application usage data for a date range.
+	// Results are ordered by date descending (newest first) and then by duration descending.
+	// Both start and end date bounds are inclusive.
 	GetAppUsageByDateRange(ctx context.Context, startDate, endDate time.Time) ([]types.AppUsage, error)
 
 	// Historical data operations

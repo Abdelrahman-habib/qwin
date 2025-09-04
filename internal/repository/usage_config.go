@@ -45,6 +45,10 @@ func (r *SQLiteRepository) GetRetryConfig() *repoerrors.RetryConfig {
 
 // SetDynamicBatchSize updates batch size configuration at runtime based on operation type
 func (r *SQLiteRepository) SetDynamicBatchSize(operationType string, batchSize int) error {
+	if r.batchConfig == nil {
+		return repoerrors.NewRepositoryError("SetDynamicBatchSize",
+			errors.New("batch configuration is not set"), repoerrors.ErrCodeValidation)
+	}
 	if batchSize <= 0 {
 		return repoerrors.NewRepositoryError("SetDynamicBatchSize",
 			errors.New("batch size must be positive"), repoerrors.ErrCodeValidation)
@@ -60,9 +64,11 @@ func (r *SQLiteRepository) SetDynamicBatchSize(operationType string, batchSize i
 	// In a more sophisticated implementation, we could have operation-specific batch sizes
 	r.batchConfig.DefaultBatchSize = batchSize
 
-	r.logger.Debug("Updated batch size configuration",
-		"operation_type", operationType,
-		"new_batch_size", batchSize)
+	if r.logger != nil {
+		r.logger.Debug("Updated batch size configuration",
+			"operation_type", operationType,
+			"new_batch_size", batchSize)
+	}
 
 	return nil
 }

@@ -17,7 +17,7 @@ func TestMigrationRunner_RunMigrations(t *testing.T) {
 	dbPath := filepath.Join(tempDir, "test_migrations.db")
 
 	// Open database connection
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestMigrationRunner_GetCurrentVersion(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test_version.db")
 
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestMigrationRunner_MultipleRuns(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test_multiple.db")
 
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestMigrationRunner_ConcurrentAccess(t *testing.T) {
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test_concurrent.db")
 
-	db, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	db, err := sql.Open("sqlite3", "file:"+dbPath+"?_foreign_keys=on&_journal_mode=WAL")
 	if err != nil {
 		t.Fatalf("Failed to open database: %v", err)
 	}

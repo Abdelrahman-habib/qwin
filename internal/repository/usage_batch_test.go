@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -126,6 +127,39 @@ func TestSQLiteRepository_BatchProcessAppUsageWithBatchSize(t *testing.T) {
 	}
 }
 
+func TestSQLiteRepository_BatchProcessAppUsageWithBatchSize_Validation(t *testing.T) {
+	t.Parallel()
+	repo := setupTestRepository(t)
+	ctx := context.Background()
+
+	date := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	appUsages := []types.AppUsage{
+		{Name: "TestApp", Duration: 1800},
+	}
+
+	// Test with negative batch size (should fail)
+	err := repo.BatchProcessAppUsageWithBatchSize(ctx, date, appUsages, types.BatchStrategyUpsert, -1)
+	if err == nil {
+		t.Error("BatchProcessAppUsageWithBatchSize should fail with negative batch size")
+	}
+
+	if !repoerrors.IsValidation(err) {
+		t.Errorf("Expected validation error for negative batch size, got: %v", err)
+	}
+
+	// Test with zero batch size (should succeed - uses default calculation)
+	err = repo.BatchProcessAppUsageWithBatchSize(ctx, date, appUsages, types.BatchStrategyUpsert, 0)
+	if err != nil {
+		t.Errorf("BatchProcessAppUsageWithBatchSize should succeed with zero batch size: %v", err)
+	}
+
+	// Test with positive batch size (should succeed)
+	err = repo.BatchProcessAppUsageWithBatchSize(ctx, date, appUsages, types.BatchStrategyUpsert, 1)
+	if err != nil {
+		t.Errorf("BatchProcessAppUsageWithBatchSize should succeed with positive batch size: %v", err)
+	}
+}
+
 func TestSQLiteRepository_BatchIncrementAppUsageDurations(t *testing.T) {
 	repo := setupTestRepository(t)
 	ctx := context.Background()
@@ -193,10 +227,9 @@ func TestSQLiteRepository_BatchIncrementAppUsageDurations(t *testing.T) {
 
 	// Test validation: overflow protection
 	// First create an app with near-max duration
-	const maxInt64 = 9223372036854775807
 	overflowApp := types.AppUsage{
 		Name:     "OverflowApp",
-		Duration: maxInt64 - 100, // Very close to max
+		Duration: math.MaxInt64 - 100, // Very close to max
 	}
 	err = repo.SaveAppUsage(ctx, date, &overflowApp)
 	if err != nil {
@@ -213,5 +246,33 @@ func TestSQLiteRepository_BatchIncrementAppUsageDurations(t *testing.T) {
 	}
 	if !repoerrors.IsValidation(err) {
 		t.Errorf("Expected validation error for overflow, got: %v", err)
+	}
+
+	// Test insert-on-missing behavior: increment non-existent app should create it
+	date2 := time.Date(2024, 1, 16, 0, 0, 0, 0, time.UTC)
+	missingAppIncrements := map[string]int64{
+		"NewApp": 1800, // This app doesn't exist, should be created
+	}
+	err = repo.BatchIncrementAppUsageDurations(ctx, date2, missingAppIncrements)
+	if err != nil {
+		t.Fatalf("BatchIncrementAppUsageDurations should create missing app: %v", err)
+	}
+
+	// Verify the new app was created
+	retrievedApps2, err := repo.GetAppUsageByDate(ctx, date2)
+	if err != nil {
+		t.Fatalf("Failed to retrieve apps after insert-on-missing: %v", err)
+	}
+
+	if len(retrievedApps2) != 1 {
+		t.Errorf("Expected 1 app after insert-on-missing, got %d", len(retrievedApps2))
+	}
+
+	if retrievedApps2[0].Name != "NewApp" {
+		t.Errorf("Expected app name 'NewApp', got %s", retrievedApps2[0].Name)
+	}
+
+	if retrievedApps2[0].Duration != 1800 {
+		t.Errorf("Expected app duration 1800, got %d", retrievedApps2[0].Duration)
 	}
 }

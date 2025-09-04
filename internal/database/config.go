@@ -2,9 +2,11 @@ package database
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -327,6 +329,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("migrationsPath cannot be empty")
 	}
 
+	// If AutoMigrate is enabled, ensure migrations path exists and is accessible
+	if c.AutoMigrate {
+		if _, err := os.Stat(c.MigrationsPath); err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("migrationsPath %q does not exist when AutoMigrate is enabled", c.MigrationsPath)
+			}
+			return fmt.Errorf("migrationsPath %q is not accessible when AutoMigrate is enabled: %w", c.MigrationsPath, err)
+		}
+	}
+
 	// Validate performance settings
 	validJournalModes := map[string]bool{
 		"DELETE":   true,
@@ -336,8 +348,20 @@ func (c *Config) Validate() error {
 		"WAL":      true,
 		"OFF":      true,
 	}
-	if !validJournalModes[c.JournalMode] {
+	// Check case-insensitive
+	journalModeValid := false
+	for validMode := range validJournalModes {
+		if strings.EqualFold(c.JournalMode, validMode) {
+			journalModeValid = true
+			break
+		}
+	}
+	if !journalModeValid {
 		return fmt.Errorf("invalid journalMode: %s", c.JournalMode)
+	}
+
+	if c.IsInMemory() && strings.EqualFold(c.JournalMode, "WAL") {
+		return fmt.Errorf("journalMode cannot be WAL when using in-memory database")
 	}
 
 	validSyncModes := map[string]bool{
@@ -419,38 +443,40 @@ func (c *Config) Validate() error {
 }
 
 // GetConnectionString builds the SQLite connection string with all options
+// Uses net/url for proper URL encoding of query parameters only
 func (c *Config) GetConnectionString() string {
-	params := make([]string, 0)
+	// Create URL values for SQLite parameters
+	values := url.Values{}
 
 	// Add foreign keys setting
 	if c.ForeignKeys {
-		params = append(params, "_foreign_keys=on")
+		values.Set("_foreign_keys", "on")
 	} else {
-		params = append(params, "_foreign_keys=off")
+		values.Set("_foreign_keys", "off")
 	}
 
 	// Add journal mode
-	params = append(params, fmt.Sprintf("_journal_mode=%s", c.JournalMode))
+	values.Set("_journal_mode", c.JournalMode)
 
 	// Add synchronous mode
-	params = append(params, fmt.Sprintf("_synchronous=%s", c.SynchronousMode))
+	values.Set("_synchronous", c.SynchronousMode)
 
 	// Add cache size (pass negative value so SQLite interprets it as KB)
-	params = append(params, fmt.Sprintf("_cache_size=%d", -c.CacheSize))
+	values.Set("_cache_size", fmt.Sprintf("%d", -c.CacheSize))
 
 	// Add busy timeout
-	params = append(params, fmt.Sprintf("_busy_timeout=%d", c.BusyTimeout))
+	values.Set("_busy_timeout", fmt.Sprintf("%d", c.BusyTimeout))
 
-	// Build connection string
-	connStr := c.Path
-	if len(params) > 0 {
-		connStr += "?" + params[0]
-		for _, param := range params[1:] {
-			connStr += "&" + param
-		}
+	// Build connection string: path + "?" + encoded query parameters
+	// We need to escape ONLY the characters that would break query string parsing
+	path := c.Path
+	if strings.ContainsAny(path, "?&") {
+		// Escape only the problematic characters that would break URL parsing
+		path = strings.ReplaceAll(path, "?", "%3F")
+		path = strings.ReplaceAll(path, "&", "%26")
 	}
-
-	return connStr
+	
+	return path + "?" + values.Encode()
 }
 
 // Clone creates a deep copy of the configuration

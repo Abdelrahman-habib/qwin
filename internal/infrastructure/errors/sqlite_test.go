@@ -89,14 +89,14 @@ func TestClassifySQLiteError(t *testing.T) {
 			err: sqlite3.Error{
 				Code: sqlite3.ErrBusy,
 			},
-			expected: ErrCodeConnection,
+			expected: ErrCodeBusy,
 		},
 		{
 			name: "database locked",
 			err: sqlite3.Error{
 				Code: sqlite3.ErrLocked,
 			},
-			expected: ErrCodeConnection,
+			expected: ErrCodeBusy,
 		},
 		{
 			name: "disk full",
@@ -110,7 +110,7 @@ func TestClassifySQLiteError(t *testing.T) {
 			err: sqlite3.Error{
 				Code: sqlite3.ErrMisuse,
 			},
-			expected: ErrCodeTransaction,
+			expected: ErrCodeInternal,
 		},
 		{
 			name: "schema error",
@@ -158,7 +158,7 @@ func TestClassifyError_SQLiteIntegration(t *testing.T) {
 		{
 			name:     "SQLite database locked via ClassifyError",
 			err:      sqlite3.Error{Code: sqlite3.ErrLocked},
-			expected: ErrCodeConnection,
+			expected: ErrCodeBusy,
 		},
 		{
 			name:     "SQLite database corrupt via ClassifyError",

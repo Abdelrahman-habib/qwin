@@ -315,3 +315,75 @@ func TestSQLiteRepository_GetAppUsageByDateRangePaginated(t *testing.T) {
 		t.Errorf("Expected empty third page, got %d items", len(apps3))
 	}
 }
+
+func TestSQLiteRepository_GetAppUsageByDateRangePaginated_Validation(t *testing.T) {
+	t.Parallel()
+	repo := setupTestRepository(t)
+	ctx := context.Background()
+
+	// Create test data
+	startDate := time.Date(2024, 1, 15, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2024, 1, 16, 0, 0, 0, 0, time.UTC)
+
+	// Add some test data
+	for i := 0; i < 5; i++ {
+		appUsage := &types.AppUsage{
+			Name:     fmt.Sprintf("ValidationApp%d", i),
+			Duration: int64(1800 + i*300),
+		}
+		err := repo.SaveAppUsage(ctx, startDate, appUsage)
+		if err != nil {
+			t.Fatalf("Failed to save app %d: %v", i, err)
+		}
+	}
+
+	// Test negative offset - should be clamped to 0
+	result, err := repo.GetAppUsageByDateRangePaginated(ctx, startDate, endDate, 10, -5)
+	if err != nil {
+		t.Fatalf("GetAppUsageByDateRangePaginated with negative offset failed: %v", err)
+	}
+	if len(result.Results) != 5 { // Should get all 5 apps since offset was clamped to 0
+		t.Errorf("Expected 5 apps with negative offset (clamped to 0), got %d", len(result.Results))
+	}
+
+	// Test zero limit - should use default limit
+	result, err = repo.GetAppUsageByDateRangePaginated(ctx, startDate, endDate, 0, 0)
+	if err != nil {
+		t.Fatalf("GetAppUsageByDateRangePaginated with zero limit failed: %v", err)
+	}
+	if len(result.Results) != 5 { // Should get all 5 apps since default limit is 100
+		t.Errorf("Expected 5 apps with zero limit (using default), got %d", len(result.Results))
+	}
+
+	// Test negative limit - should use default limit
+	result, err = repo.GetAppUsageByDateRangePaginated(ctx, startDate, endDate, -10, 0)
+	if err != nil {
+		t.Fatalf("GetAppUsageByDateRangePaginated with negative limit failed: %v", err)
+	}
+	if len(result.Results) != 5 { // Should get all 5 apps since default limit is 100
+		t.Errorf("Expected 5 apps with negative limit (using default), got %d", len(result.Results))
+	}
+
+	// Test limit exceeding maximum - should be clamped to max
+	// First, let's create more data to test the clamping
+	for i := 5; i < 15; i++ {
+		appUsage := &types.AppUsage{
+			Name:     fmt.Sprintf("ValidationApp%d", i),
+			Duration: int64(1800 + i*300),
+		}
+		err := repo.SaveAppUsage(ctx, startDate, appUsage)
+		if err != nil {
+			t.Fatalf("Failed to save app %d: %v", i, err)
+		}
+	}
+
+	// Test with limit exceeding maximum (MaxBatchSize = 1000 from BatchConfig)
+	// Since we only have 15 apps, we should get all 15, not 1000
+	result, err = repo.GetAppUsageByDateRangePaginated(ctx, startDate, endDate, 2000, 0)
+	if err != nil {
+		t.Fatalf("GetAppUsageByDateRangePaginated with excessive limit failed: %v", err)
+	}
+	if len(result.Results) != 15 { // Should get all 15 apps
+		t.Errorf("Expected 15 apps with excessive limit (clamped to max), got %d", len(result.Results))
+	}
+}

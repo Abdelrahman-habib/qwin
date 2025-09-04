@@ -168,3 +168,56 @@ func TestScreenTimeTracker_PersistenceDisabledOperations(t *testing.T) {
 		t.Error("loadTodaysData() should not call repository when persistence is disabled")
 	}
 }
+
+func TestScreenTimeTracker_StartStopRunningState(t *testing.T) {
+	mockRepo := NewMockRepository()
+	tracker := NewScreenTimeTracker(mockRepo, logging.NewDefaultLogger())
+
+	// Initially should not be running
+	if tracker.IsRunning() {
+		t.Error("Tracker should not be running initially")
+	}
+
+	// Start the tracker
+	tracker.Start()
+
+	// Should now be running
+	if !tracker.IsRunning() {
+		t.Error("Tracker should be running after Start()")
+	}
+
+	// Calling Start() again should not change anything (no duplicate goroutines)
+	tracker.Start() // Should return early
+
+	// Should still be running
+	if !tracker.IsRunning() {
+		t.Error("Tracker should still be running after duplicate Start()")
+	}
+
+	// Stop the tracker
+	tracker.Stop()
+
+	// Should no longer be running
+	if tracker.IsRunning() {
+		t.Error("Tracker should not be running after Stop()")
+	}
+
+	// Calling Stop() again should not cause issues
+	tracker.Stop() // Should return early
+
+	// Should still not be running
+	if tracker.IsRunning() {
+		t.Error("Tracker should still not be running after duplicate Stop()")
+	}
+
+	// Should be able to start again after stopping
+	tracker.Start()
+
+	// Should be running again
+	if !tracker.IsRunning() {
+		t.Error("Tracker should be running after restart")
+	}
+
+	// Clean up
+	tracker.Stop()
+}

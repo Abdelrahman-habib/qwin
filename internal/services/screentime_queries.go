@@ -78,11 +78,16 @@ func (st *ScreenTimeTracker) GetAppUsageHistory(appName string, days int) ([]typ
 		return nil, errors.NewRepositoryError("GetAppUsageHistory", nil, errors.ErrCodeConnection)
 	}
 
+	// Validate days parameter - clamp to minimum of 1
+	if days <= 0 {
+		days = 1
+	}
+
 	ctx := context.Background()
 
-	// Calculate date range
+	// Calculate inclusive date range that includes today (matches GetUsageHistory behavior)
 	endDate := time.Now()
-	startDate := endDate.AddDate(0, 0, -days)
+	startDate := endDate.AddDate(0, 0, -days+1)
 
 	// Get app usage data filtered by app name at the database level
 	return st.repository.GetAppUsageByNameAndDateRange(ctx, appName, startDate, endDate)

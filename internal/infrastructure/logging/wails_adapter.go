@@ -7,6 +7,9 @@ type WailsLoggerAdapter struct {
 
 // NewWailsLoggerAdapter creates a new Wails logger adapter using our structured logger
 func NewWailsLoggerAdapter(logger Logger) *WailsLoggerAdapter {
+	if logger == nil {
+		logger = NewDefaultLogger()
+	}
 	return &WailsLoggerAdapter{
 		logger: logger,
 	}

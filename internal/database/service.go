@@ -7,6 +7,8 @@ import (
 	queries "qwin/internal/database/generated"
 	dberrors "qwin/internal/infrastructure/errors"
 	"qwin/internal/infrastructure/logging"
+	"strings"
+	"sync"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -25,6 +27,7 @@ type SQLiteService struct {
 	migrationRunner MigrationManager
 	queries         *queries.Queries
 	prepared        *queries.Queries // Centralized prepared statements
+	preparedMu      sync.RWMutex     // Protects lazy initialization of prepared statements
 	logger          logging.Logger
 }
 
@@ -39,8 +42,30 @@ func NewSQLiteService(logger logging.Logger) *SQLiteService {
 func (s *SQLiteService) Connect(ctx context.Context, config *Config) error {
 	s.config = config
 
+	// Close any existing connection to prevent resource leaks
+	if s.db != nil {
+		if err := s.db.Close(); err != nil {
+			s.logger.Error("Failed to close existing database connection", "error", err)
+			// Continue with new connection even if close fails
+		}
+		// Clear references to prevent accidental reuse
+		s.db = nil
+		s.queries = nil
+		s.migrationRunner = nil
+
+		// Clear prepared statements
+		s.preparedMu.Lock()
+		if s.prepared != nil {
+			if err := s.prepared.Close(); err != nil {
+				s.logger.Error("Failed to close existing prepared statements", "error", err)
+			}
+			s.prepared = nil
+		}
+		s.preparedMu.Unlock()
+	}
+
 	// Build connection string with configuration options
-	connStr := s.buildConnectionString(config)
+	connStr := config.GetConnectionString()
 
 	// Open database connection
 	db, err := sql.Open("sqlite3", connStr)
@@ -73,22 +98,25 @@ func (s *SQLiteService) Close() error {
 		return nil
 	}
 
-	if err := s.db.Close(); err != nil {
-		return dberrors.HandleConnectionError("Close", fmt.Sprintf("failed to close database: %v", err))
-	}
-
-	// Close prepared statements if they exist
+	// Close prepared statements first to avoid masking errors
+	s.preparedMu.Lock()
 	if s.prepared != nil {
 		if err := s.prepared.Close(); err != nil {
 			s.logger.Error("Failed to close prepared statements", "error", err)
 			// Continue with cleanup even if prepared statements fail to close
 		}
+		s.prepared = nil
+	}
+	s.preparedMu.Unlock()
+
+	// Close database connection
+	if err := s.db.Close(); err != nil {
+		return dberrors.HandleConnectionError("Close", fmt.Sprintf("failed to close database: %v", err))
 	}
 
-	// Null out internal references to prevent accidental reuse
+	// Null out remaining internal references to prevent accidental reuse
 	s.db = nil
 	s.queries = nil
-	s.prepared = nil
 	s.migrationRunner = nil
 
 	s.logger.Info("Closed SQLite database connection")
@@ -184,7 +212,20 @@ func (s *SQLiteService) GetPreparedQueries(ctx context.Context) (*queries.Querie
 		return nil, dberrors.HandleConnectionError("GetPreparedQueries", "database not connected")
 	}
 
-	// Return existing prepared queries if already created
+	// Fast path: check if prepared queries already exist (read lock)
+	s.preparedMu.RLock()
+	if s.prepared != nil {
+		prepared := s.prepared
+		s.preparedMu.RUnlock()
+		return prepared, nil
+	}
+	s.preparedMu.RUnlock()
+
+	// Slow path: need to create prepared queries (write lock)
+	s.preparedMu.Lock()
+	defer s.preparedMu.Unlock()
+
+	// Double-check pattern: another goroutine might have created it while we waited
 	if s.prepared != nil {
 		return s.prepared, nil
 	}
@@ -232,34 +273,6 @@ func (s *SQLiteService) Optimize(ctx context.Context) error {
 	return nil
 }
 
-// buildConnectionString constructs the SQLite connection string with configuration options
-func (s *SQLiteService) buildConnectionString(config *Config) string {
-	connStr := config.Path
-
-	// Add query parameters
-	params := []string{}
-
-	if config.ForeignKeys {
-		params = append(params, "_foreign_keys=on")
-	} else {
-		params = append(params, "_foreign_keys=off")
-	}
-
-	params = append(params, fmt.Sprintf("_journal_mode=%s", config.JournalMode))
-	params = append(params, fmt.Sprintf("_synchronous=%s", config.SynchronousMode))
-	params = append(params, fmt.Sprintf("_cache_size=%d", config.CacheSize))
-	params = append(params, fmt.Sprintf("_busy_timeout=%d", config.BusyTimeout))
-
-	if len(params) > 0 {
-		connStr += "?" + params[0]
-		for _, param := range params[1:] {
-			connStr += "&" + param
-		}
-	}
-
-	return connStr
-}
-
 // configureConnectionPool sets up connection pool settings optimized for SQLite
 func (s *SQLiteService) configureConnectionPool(db *sql.DB, config *Config) {
 	// Check if we should force single connection mode
@@ -272,7 +285,7 @@ func (s *SQLiteService) configureConnectionPool(db *sql.DB, config *Config) {
 
 	// Detect SQLite-specific constraints
 	isSQLite := true // We know this is SQLite service
-	isWALEnabled := config.JournalMode == "WAL"
+	isWALEnabled := strings.EqualFold(config.JournalMode, "WAL")
 
 	if isSQLite && !isWALEnabled {
 		// SQLite without WAL mode should use single connection to avoid locking issues
@@ -282,14 +295,25 @@ func (s *SQLiteService) configureConnectionPool(db *sql.DB, config *Config) {
 			"journalMode", config.JournalMode)
 	} else if isSQLite && isWALEnabled {
 		// SQLite with WAL can handle multiple readers, but keep it conservative
+		// Compute maxConns from config but ensure it's > 0 and cap at 4
 		maxConns := config.MaxConnections
+		if maxConns <= 0 {
+			maxConns = 4 // Set sane default if <= 0
+		}
 		if maxConns > 4 {
 			maxConns = 4 // Cap at 4 for SQLite even with WAL
 		}
+
+		// Compute idleConns as min of config and maxConns, ensure > 0
+		idleConns := min(config.MaxIdleConns, maxConns)
+		if idleConns <= 0 {
+			idleConns = 1 // Set minimum idle connections
+		}
+
 		db.SetMaxOpenConns(maxConns)
-		db.SetMaxIdleConns(min(config.MaxIdleConns, maxConns))
+		db.SetMaxIdleConns(idleConns)
 		s.logger.Info("Configured SQLite for limited connection pool (WAL mode)",
-			"maxOpenConns", maxConns, "maxIdleConns", min(config.MaxIdleConns, maxConns))
+			"maxOpenConns", maxConns, "maxIdleConns", idleConns)
 	} else {
 		// Use configured values for other databases (future-proofing)
 		db.SetMaxOpenConns(config.MaxConnections)

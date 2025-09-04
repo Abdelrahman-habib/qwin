@@ -19,6 +19,7 @@ type ScreenTimeTracker struct {
 	lastApp            string
 	lastTime           time.Time
 	startTime          time.Time
+	running            bool // Protected by mutex, indicates if service is active
 	stopTracking       chan bool
 	windowAPI          platform.WindowAPI
 	repository         repository.UsageRepository
@@ -39,7 +40,7 @@ func NewScreenTimeTracker(repo repository.UsageRepository, logger logging.Logger
 	return &ScreenTimeTracker{
 		usageData:          make(map[string]int64),
 		appInfoCache:       make(map[string]*platform.AppInfo),
-		startTime:          now,
+		// startTime will be set when Start() is called
 		stopTracking:       make(chan bool),
 		windowAPI:          platform.NewWindowAPI(),
 		repository:         repo,
@@ -51,6 +52,23 @@ func NewScreenTimeTracker(repo repository.UsageRepository, logger logging.Logger
 
 // Start begins the background tracking process
 func (st *ScreenTimeTracker) Start() {
+	// Check if already running and return early if so
+	st.mutex.Lock()
+	if st.running {
+		st.mutex.Unlock()
+		return // Already running, avoid duplicate tracking/persistence
+	}
+	
+	// Initialize start time now that tracking is actually beginning
+	now := time.Now()
+	if st.startTime.IsZero() {
+		st.startTime = now
+	}
+	
+	// Mark as running
+	st.running = true
+	st.mutex.Unlock()
+
 	// Load existing data for today
 	st.loadTodaysData()
 
@@ -63,6 +81,15 @@ func (st *ScreenTimeTracker) Start() {
 
 // Stop stops the tracking process
 func (st *ScreenTimeTracker) Stop() {
+	// Clear running state under mutex protection
+	st.mutex.Lock()
+	if !st.running {
+		st.mutex.Unlock()
+		return // Already stopped
+	}
+	st.running = false
+	st.mutex.Unlock()
+
 	// Stop persistence ticker
 	if st.persistTicker != nil {
 		st.persistTicker.Stop()
@@ -125,8 +152,11 @@ func (st *ScreenTimeTracker) GetUsageData() *types.UsageData {
 	st.mutex.RLock()
 	defer st.mutex.RUnlock()
 
-	// Calculate total time since start
-	totalTime := int64(time.Since(st.startTime).Seconds())
+	// Calculate total time since start (only if tracking has been started)
+	var totalTime int64
+	if !st.startTime.IsZero() {
+		totalTime = int64(time.Since(st.startTime).Seconds())
+	}
 
 	// Convert map to sorted slice with cached app info
 	apps := make([]types.AppUsage, 0, len(st.usageData))
@@ -157,6 +187,20 @@ func (st *ScreenTimeTracker) GetUsageData() *types.UsageData {
 		TotalTime: totalTime,
 		Apps:      apps,
 	}
+}
+
+// CurrentDate returns the current date being tracked
+func (st *ScreenTimeTracker) CurrentDate() time.Time {
+	st.mutex.RLock()
+	defer st.mutex.RUnlock()
+	return st.currentDate
+}
+
+// IsRunning returns whether the tracker is currently running
+func (st *ScreenTimeTracker) IsRunning() bool {
+	st.mutex.RLock()
+	defer st.mutex.RUnlock()
+	return st.running
 }
 
 // sortAppsByDuration sorts apps by duration in descending order

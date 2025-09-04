@@ -21,6 +21,8 @@ func TestErrorCode_String(t *testing.T) {
 		{ErrCodePermission, "PERMISSION"},
 		{ErrCodeDiskSpace, "DISK_SPACE"},
 		{ErrCodeCorruption, "CORRUPTION"},
+		{ErrCodeInternal, "INTERNAL"},
+		{ErrCodeBusy, "BUSY"},
 		{ErrCodeUnknown, "UNKNOWN"},
 	}
 
@@ -195,6 +197,7 @@ func TestErrorClassificationFunctions(t *testing.T) {
 		{"IsPermission with RepositoryError", NewRepositoryError("op", nil, ErrCodePermission), IsPermission, true},
 		{"IsDiskSpace with RepositoryError", NewRepositoryError("op", nil, ErrCodeDiskSpace), IsDiskSpace, true},
 		{"IsCorruption with RepositoryError", NewRepositoryError("op", nil, ErrCodeCorruption), IsCorruption, true},
+		{"IsInternal with RepositoryError", NewRepositoryError("op", nil, ErrCodeInternal), IsInternal, true},
 	}
 
 	for _, tt := range tests {
@@ -223,6 +226,7 @@ func TestIsRetryableError(t *testing.T) {
 		{"Validation error is not retryable", ErrCodeValidation, nil, false},
 		{"Permission error is not retryable", ErrCodePermission, nil, false},
 		{"Corruption error is not retryable", ErrCodeCorruption, nil, false},
+		{"Internal error is not retryable", ErrCodeInternal, nil, false},
 		{"Unknown error with 'temporary' is retryable", ErrCodeUnknown, errors.New("temporary failure"), true},
 		{"Unknown error with 'retry' is retryable", ErrCodeUnknown, errors.New("please retry"), true},
 		{"Unknown error with 'busy' is retryable", ErrCodeUnknown, errors.New("database busy"), true},

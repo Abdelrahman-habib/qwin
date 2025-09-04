@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"qwin/internal/infrastructure/errors"
@@ -29,8 +30,16 @@ func (st *ScreenTimeTracker) ResetUsageData() {
 
 // CleanupOldData removes usage data older than the specified number of days
 func (st *ScreenTimeTracker) CleanupOldData(retentionDays int) error {
+	// Validate retentionDays parameter
+	if retentionDays < 0 {
+		return fmt.Errorf("invalid retentionDays %d: must be non-negative", retentionDays)
+	}
+
+	// Validate repository is not nil
 	if st.repository == nil {
-		return errors.NewRepositoryError("CleanupOldData", nil, errors.ErrCodeConnection)
+		return errors.NewRepositoryError("CleanupOldData", 
+			fmt.Errorf("repository is nil"), 
+			errors.ErrCodeConnection)
 	}
 
 	ctx := context.Background()

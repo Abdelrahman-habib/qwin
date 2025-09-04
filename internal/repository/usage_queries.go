@@ -129,7 +129,41 @@ func (r *SQLiteRepository) GetAppUsageByDateRangePaginated(ctx context.Context, 
 	normalizedStart := time.Date(startDate.Year(), startDate.Month(), startDate.Day(), 0, 0, 0, 0, startDate.Location())
 	normalizedEnd := time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, endDate.Location())
 
-	// Get paginated results
+	// Validate and clamp pagination parameters
+	// Ensure offset is not negative
+	if offset < 0 {
+		offset = 0
+	}
+
+	// Get default and maximum limits from batch config
+	// If no batch config is set, use sensible defaults
+	defaultLimit := 100 // Default pagination limit
+	maxLimit := 1000    // Maximum pagination limit
+
+	if r.batchConfig != nil {
+		defaultLimit = r.batchConfig.DefaultBatchSize
+		maxLimit = r.batchConfig.MaxBatchSize
+	}
+
+	// Normalize limits to handle malformed config
+	// Ensure maxLimit is positive (fallback to safe max if needed)
+	if maxLimit <= 0 {
+		maxLimit = 1000 // Safe fallback maximum
+	}
+
+	// Clamp defaultLimit to not exceed maxLimit
+	if defaultLimit > maxLimit {
+		defaultLimit = maxLimit
+	}
+
+	// Clamp limit to valid range
+	if limit <= 0 {
+		limit = defaultLimit
+	} else if limit > maxLimit {
+		limit = maxLimit
+	}
+
+	// Get paginated results with sanitized parameters
 	rows, err := r.queries.GetAppUsageByDateRangePaginated(ctx, queries.GetAppUsageByDateRangePaginatedParams{
 		Date:   normalizedStart,
 		Date_2: normalizedEnd,
