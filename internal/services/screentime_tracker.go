@@ -81,18 +81,20 @@ func (st *ScreenTimeTracker) Start() {
 
 // Stop stops the tracking process
 func (st *ScreenTimeTracker) Stop() {
-	// Clear running state under mutex protection
+	// Clear running state and get ticker reference under mutex protection
 	st.mutex.Lock()
 	if !st.running {
 		st.mutex.Unlock()
 		return // Already stopped
 	}
 	st.running = false
+	ticker := st.persistTicker
+	st.persistTicker = nil
 	st.mutex.Unlock()
 
 	// Stop persistence ticker
-	if st.persistTicker != nil {
-		st.persistTicker.Stop()
+	if ticker != nil {
+		ticker.Stop()
 	}
 
 	// Persist final data before stopping

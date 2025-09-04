@@ -12,17 +12,21 @@ import (
 
 // startPersistenceLoop starts the periodic data persistence (every 30 seconds)
 func (st *ScreenTimeTracker) startPersistenceLoop() {
-	st.persistTicker = time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(30 * time.Second)
+	
+	// Assign ticker to struct field under mutex protection
+	st.mutex.Lock()
+	st.persistTicker = ticker
+	st.mutex.Unlock()
+	
 	go func() {
 		for {
 			select {
-			case <-st.persistTicker.C:
+			case <-ticker.C:
 				st.persistCurrentData()
 			case <-st.stopTracking:
 				// Stop the ticker to prevent timer leak
-				if st.persistTicker != nil {
-					st.persistTicker.Stop()
-				}
+				ticker.Stop()
 				return
 			}
 		}
