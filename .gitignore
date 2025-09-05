@@ -177,3 +177,6 @@ settings.local.*
 # Warp Agent configuration
 WARP.md
 
+# SQLC generated files
+internal/database/generated/
+

@@ -67,6 +67,17 @@ jobs:
           go-version: "1.23"
           cache: true
 
+      # Install SQLC for Go analysis
+      - name: Install SQLC
+        if: matrix.language == 'go'
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+
+      # Generate SQLC code for Go analysis
+      - name: Generate SQLC code
+        if: matrix.language == 'go'
+        run: sqlc generate
+
       # Setup Node.js for JavaScript/TypeScript analysis
       - name: Setup Node.js
         if: matrix.language == 'javascript-typescript'
