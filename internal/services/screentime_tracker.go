@@ -1,6 +1,7 @@
 package services
 
 import (
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"qwin/internal/repository"
 	"qwin/internal/types"
 )
+
+const defaultTopN = 5
 
 // ScreenTimeTracker manages screen time tracking functionality
 type ScreenTimeTracker struct {
@@ -32,20 +35,24 @@ type ScreenTimeTracker struct {
 
 // NewScreenTimeTracker creates a new screen time tracker with repository dependency
 func NewScreenTimeTracker(repo repository.UsageRepository, logger logging.Logger) *ScreenTimeTracker {
+	return NewScreenTimeTrackerWithWindowAPI(repo, logger, platform.NewWindowAPI())
+}
+
+// NewScreenTimeTrackerWithWindowAPI creates a new screen time tracker with dependency injection for testing
+func NewScreenTimeTrackerWithWindowAPI(repo repository.UsageRepository, logger logging.Logger, windowAPI platform.WindowAPI) *ScreenTimeTracker {
 	if logger == nil {
 		logger = logging.NewDefaultLogger()
 	}
 
-	now := time.Now()
 	return &ScreenTimeTracker{
 		usageData:    make(map[string]int64),
 		appInfoCache: make(map[string]*platform.AppInfo),
 		// startTime will be set when Start() is called
-		stopTracking:       make(chan bool),
-		windowAPI:          platform.NewWindowAPI(),
-		repository:         repo,
-		logger:             logger,
-		currentDate:        time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()),
+		stopTracking: make(chan bool),
+		windowAPI:    windowAPI,
+		repository:   repo,
+		logger:       logger,
+		// currentDate is initialized in Start()
 		persistenceEnabled: true, // Default to enabled
 	}
 }
@@ -69,6 +76,12 @@ func (st *ScreenTimeTracker) Start() {
 	st.running = true
 	st.mutex.Unlock()
 
+	// Initialize current date to today's midnight
+	nowMidnight := time.Now()
+	st.mutex.Lock()
+	st.currentDate = time.Date(nowMidnight.Year(), nowMidnight.Month(), nowMidnight.Day(), 0, 0, 0, 0, nowMidnight.Location())
+	st.mutex.Unlock()
+
 	// Load existing data for today
 	st.loadTodaysData()
 
@@ -76,7 +89,7 @@ func (st *ScreenTimeTracker) Start() {
 	go st.trackingLoop()
 
 	// Start persistence loop (every 30 seconds)
-	st.startPersistenceLoop()
+	go st.startPersistenceLoop()
 }
 
 // Stop stops the tracking process
@@ -98,16 +111,23 @@ func (st *ScreenTimeTracker) Stop() {
 		ticker.Stop()
 	}
 
-	// Persist final data before stopping
-	st.persistCurrentData()
+	// Stop tracking (block until trackingLoop receives the signal)
+	st.stopTracking <- true
 
-	// Persist final data before stopping (only if tracking was started)
+	// Attribute any final elapsed time for the last active app
+	st.mutex.Lock()
+	if st.lastApp != "" && !st.lastTime.IsZero() {
+		elapsed := time.Since(st.lastTime).Seconds()
+		if elapsed > 0 {
+			st.usageData[st.lastApp] += int64(math.Round(elapsed))
+		}
+	}
+	st.mutex.Unlock()
+
+	// Persist final data once (only if tracking was started)
 	if wasStarted {
 		st.persistCurrentData()
 	}
-
-	// Stop tracking (block until trackingLoop receives the signal)
-	st.stopTracking <- true
 }
 
 // trackingLoop runs the main tracking loop
@@ -146,7 +166,7 @@ func (st *ScreenTimeTracker) trackCurrentApp() {
 	if st.lastApp != "" && !st.lastTime.IsZero() {
 		elapsed := now.Sub(st.lastTime).Seconds()
 		if elapsed > 0 {
-			st.usageData[st.lastApp] += int64(elapsed)
+			st.usageData[st.lastApp] += int64(math.Round(elapsed))
 		}
 	}
 
@@ -163,7 +183,13 @@ func (st *ScreenTimeTracker) GetUsageData() *types.UsageData {
 	// Calculate total time since start (only if tracking has been started)
 	var totalTime int64
 	if !st.startTime.IsZero() {
-		totalTime = int64(time.Since(st.startTime).Seconds())
+		end := time.Now()
+		if !st.running && !st.lastTime.IsZero() && st.lastTime.After(st.startTime) {
+			end = st.lastTime
+		}
+		if end.After(st.startTime) {
+			totalTime = int64(end.Sub(st.startTime).Seconds())
+		}
 	}
 
 	// Convert map to sorted slice with cached app info
@@ -186,9 +212,9 @@ func (st *ScreenTimeTracker) GetUsageData() *types.UsageData {
 	// Sort apps by duration (descending)
 	st.sortAppsByDuration(apps)
 
-	// Return top 5 apps
-	if len(apps) > 5 {
-		apps = apps[:5]
+	// Return top N apps
+	if len(apps) > defaultTopN {
+		apps = apps[:defaultTopN]
 	}
 
 	return &types.UsageData{

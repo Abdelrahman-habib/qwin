@@ -36,7 +36,7 @@ func TestScreenTimeTracker_ResetUsageData(t *testing.T) {
 
 	// Verify persistence was called before reset
 	save, _, batch, _, _, _ := mockRepo.GetCallCounts()
-	if save == 0 || batch == 0 {
+	if save == 0 && batch == 0 {
 		t.Error("ResetUsageData() should persist data before reset")
 	}
 }
@@ -59,8 +59,6 @@ func TestScreenTimeTracker_CleanupOldData(t *testing.T) {
 }
 
 func TestScreenTimeTracker_ErrorHandling(t *testing.T) {
-	mockRepo := NewMockRepository()
-
 	tests := []struct {
 		name        string
 		failSave    bool
@@ -93,6 +91,7 @@ func TestScreenTimeTracker_ErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := NewMockRepository()
 			mockRepo.SetFailureModes(tt.failSave, tt.failLoad, tt.failBatch, tt.failTx)
 			tracker := NewScreenTimeTracker(mockRepo, logging.NewDefaultLogger())
 
@@ -329,7 +328,7 @@ func TestScreenTimeTracker_ElapsedTimeAttribution(t *testing.T) {
 	tracker.lastTime = now
 	tracker.mutex.Unlock()
 
-	// Simulate Chrome usage for 5 seconds
+	// Prepare for attribution on app switch (we will attribute the next 3s to Chrome)
 	timeAfter5Sec := now.Add(5 * time.Second)
 	tracker.mutex.Lock()
 	tracker.lastTime = timeAfter5Sec
@@ -343,11 +342,11 @@ func TestScreenTimeTracker_ElapsedTimeAttribution(t *testing.T) {
 	tracker.lastTime = timeAfter5Sec
 	tracker.lastApp = "Chrome"
 	tracker.mutex.Unlock()
-	
+
 	// Simulate what trackCurrentApp does
 	appInfo := mockWindowAPI.GetCurrentAppInfo()
 	timeAfter8Sec := timeAfter5Sec.Add(3 * time.Second)
-	
+
 	tracker.mutex.Lock()
 	// This should attribute 3 seconds to Chrome (from timeAfter5Sec to timeAfter8Sec)
 	if tracker.lastApp != "" && !tracker.lastTime.IsZero() {

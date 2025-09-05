@@ -218,7 +218,7 @@ func (m *MockRepository) GetUsageHistory(ctx context.Context, days int) (map[str
 	// Compute local start-of-day explicitly to avoid DST drift
 	t := time.Now().In(time.Local)
 	startOfDay := time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.Local)
-	earliestKey := startOfDay.AddDate(0, 0, -(days-1)).Format("2006-01-02")
+	earliestKey := startOfDay.AddDate(0, 0, -(days - 1)).Format("2006-01-02")
 	for dateKey, usage := range m.dailyUsage {
 		if dateKey < earliestKey {
 			continue
@@ -335,7 +335,11 @@ func (m *MockRepository) BatchIncrementAppUsageDurations(ctx context.Context, da
 
 // GetAppUsageByDateRangePaginated implements UsageRepository interface
 func (m *MockRepository) GetAppUsageByDateRangePaginated(ctx context.Context, startDate, endDate time.Time, limit, offset int) (*types.PaginatedAppUsageResult, error) {
-	if m.shouldFailLoad {
+	m.mu.RLock()
+	shouldFail := m.shouldFailLoad
+	m.mu.RUnlock()
+
+	if shouldFail {
 		return nil, errors.NewRepositoryError("GetAppUsageByDateRangePaginated", fmt.Errorf("mock load failure"), errors.ErrCodeConnection)
 	}
 

@@ -157,7 +157,7 @@ func (e *RepositoryError) IsRetryable() bool {
 // GetCode returns the error code as a string (for logging interface compatibility)
 func (e *RepositoryError) GetCode() string {
 	if e == nil {
-		return ""
+		return ErrCodeUnknown.String()
 	}
 	return e.Code.String()
 }

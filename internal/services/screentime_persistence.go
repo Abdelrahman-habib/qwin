@@ -13,12 +13,12 @@ import (
 // startPersistenceLoop starts the periodic data persistence (every 30 seconds)
 func (st *ScreenTimeTracker) startPersistenceLoop() {
 	ticker := time.NewTicker(30 * time.Second)
-	
+
 	// Assign ticker to struct field under mutex protection
 	st.mutex.Lock()
 	st.persistTicker = ticker
 	st.mutex.Unlock()
-	
+
 	go func() {
 		for {
 			select {
@@ -70,18 +70,18 @@ func (st *ScreenTimeTracker) persistDataForDate(ctx context.Context, date time.T
 		// Calculate start and end boundaries of the target date
 		startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
 		endOfDay := time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
-		
+
 		// Clamp the time interval to the target date boundaries
 		start := st.startTime
 		if start.Before(startOfDay) {
 			start = startOfDay
 		}
-		
+
 		end := time.Now()
 		if end.After(endOfDay) {
 			end = endOfDay
 		}
-		
+
 		// Calculate elapsed time only within the target date boundaries
 		if end.After(start) {
 			totalTime = int64(end.Sub(start).Seconds())

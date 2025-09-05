@@ -43,20 +43,15 @@ func NewSQLiteService(logger logging.Logger) *SQLiteService {
 
 // Connect establishes a connection to the SQLite database
 func (s *SQLiteService) Connect(ctx context.Context, config *Config) error {
+	if config == nil {
+		return dberrors.HandleValidationError("Connect", "config", "nil", "config cannot be nil")
+	}
+
 	s.config = config
 
 	// Close any existing connection to prevent resource leaks
 	if s.db != nil {
-		if err := s.db.Close(); err != nil {
-			s.logger.Error("Failed to close existing database connection", "error", err)
-			// Continue with new connection even if close fails
-		}
-		// Clear references to prevent accidental reuse
-		s.db = nil
-		s.queries = nil
-		s.migrationRunner = nil
-
-		// Clear prepared statements
+		// Close prepared statements first to avoid invalidating statement handles
 		s.preparedMu.Lock()
 		if s.prepared != nil {
 			if err := s.prepared.Close(); err != nil {
@@ -65,6 +60,17 @@ func (s *SQLiteService) Connect(ctx context.Context, config *Config) error {
 			s.prepared = nil
 		}
 		s.preparedMu.Unlock()
+
+		// Then close database connection
+		if err := s.db.Close(); err != nil {
+			s.logger.Error("Failed to close existing database connection", "error", err)
+			// Continue with new connection even if close fails
+		}
+
+		// Clear references to prevent accidental reuse
+		s.db = nil
+		s.queries = nil
+		s.migrationRunner = nil
 	}
 
 	// Build connection string with configuration options
@@ -104,8 +110,8 @@ func (s *SQLiteService) Close() error {
 	// Close prepared statements first to avoid masking errors
 	s.preparedMu.Lock()
 	if s.prepared != nil {
-		if err := s.prepared.Close(); err != nil {
-			s.logger.Error("Failed to close prepared statements", "error", err)
+		if err := s.prepared.Close(); err != nil && s.logger != nil {
+			s.logger.Warn("Failed to close prepared statements", "error", err)
 			// Continue with cleanup even if prepared statements fail to close
 		}
 		s.prepared = nil
@@ -265,9 +271,11 @@ func (s *SQLiteService) Optimize(ctx context.Context) error {
 		})
 	}
 
-	// Best-effort WAL checkpoint to trim .wal (ignored on non-WAL)
-	if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil && s.logger != nil {
-		s.logger.Warn("wal_checkpoint failed", "error", err)
+	//  Best-effort WAL checkpoint only if WAL is enabled
+	if s.config != nil && strings.EqualFold(s.config.JournalMode, "WAL") {
+		if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil && s.logger != nil {
+			s.logger.Warn("wal_checkpoint failed", "error", err)
+		}
 	}
 
 	// Run VACUUM to reclaim space and defragment
@@ -327,10 +335,6 @@ func (s *SQLiteService) configureConnectionPool(db *sql.DB, config *Config) {
 		db.SetMaxIdleConns(idleConns)
 		s.logger.Info("Configured SQLite for limited connection pool (WAL mode)",
 			"maxOpenConns", maxConns, "maxIdleConns", idleConns)
-	} else {
-		// Use configured values for other databases (future-proofing)
-		db.SetMaxOpenConns(config.MaxConnections)
-		db.SetMaxIdleConns(config.MaxIdleConns)
 	}
 
 	// Set connection lifetime settings

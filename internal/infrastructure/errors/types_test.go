@@ -219,6 +219,7 @@ func TestIsRetryableError(t *testing.T) {
 		{"Connection error is retryable", ErrCodeConnection, nil, true},
 		{"Timeout error is retryable", ErrCodeTimeout, nil, true},
 		{"Transaction error is retryable", ErrCodeTransaction, nil, true},
+		{"Busy error is retryable", ErrCodeBusy, nil, true},
 		{"Disk space error is not retryable", ErrCodeDiskSpace, nil, false},
 		{"Not found error is not retryable", ErrCodeNotFound, nil, false},
 		{"Duplicate error is not retryable", ErrCodeDuplicate, nil, false},
@@ -244,11 +245,16 @@ func TestIsRetryableError(t *testing.T) {
 
 func TestIsRetryable(t *testing.T) {
 	retryableErr := NewRepositoryError("op", nil, ErrCodeConnection)
+	busyErr := NewRepositoryError("op", nil, ErrCodeBusy)
 	nonRetryableErr := NewRepositoryError("op", nil, ErrCodeNotFound)
 	otherErr := errors.New("other error")
 
 	if !IsRetryable(retryableErr) {
 		t.Error("Expected retryable error to return true")
+	}
+
+	if !IsRetryable(busyErr) {
+		t.Error("Expected busy error to return true")
 	}
 
 	if IsRetryable(nonRetryableErr) {
@@ -354,8 +360,8 @@ func TestRepositoryError_NilReceiverGuards(t *testing.T) {
 	}
 
 	// Test GetCode
-	if code := nilErr.GetCode(); code != "" {
-		t.Errorf("Expected nil.GetCode() to return empty string, got %v", code)
+	if code := nilErr.GetCode(); code != "UNKNOWN" {
+		t.Errorf("Expected nil.GetCode() to return UNKNOWN string, got %v", code)
 	}
 
 	// Test GetContext
@@ -459,7 +465,7 @@ func TestIsRetryableError_EnhancedHeuristics(t *testing.T) {
 	// Test the enhanced heuristics for unknown errors
 	tests := []struct {
 		name        string
-		errorMsg     string
+		errorMsg    string
 		expectRetry bool
 	}{
 		// Existing heuristics
@@ -479,14 +485,14 @@ func TestIsRetryableError_EnhancedHeuristics(t *testing.T) {
 		{"unrelated message", "invalid input format", false},
 	}
 
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				// Create an error with ErrCodeUnknown so it falls back to heuristics
-				testErr := errors.New(tt.errorMsg)
-				got := isRetryableError(ErrCodeUnknown, testErr)
-				if got != tt.expectRetry {
-					t.Errorf("isRetryableError() = %v, expected %v for message '%s'", got, tt.expectRetry, tt.errorMsg)
-				}
-			})
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create an error with ErrCodeUnknown so it falls back to heuristics
+			testErr := errors.New(tt.errorMsg)
+			got := isRetryableError(ErrCodeUnknown, testErr)
+			if got != tt.expectRetry {
+				t.Errorf("isRetryableError() = %v, expected %v for message '%s'", got, tt.expectRetry, tt.errorMsg)
+			}
+		})
+	}
 }
