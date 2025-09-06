@@ -32,6 +32,7 @@ jobs:
 
       # Install SQLC for vulnerability scanning
       - name: Install SQLC
+        shell: bash
         run: |
           go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
 
