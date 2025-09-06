@@ -27,6 +27,7 @@ type SQLiteService struct {
 	migrationRunner MigrationManager
 	queries         *queries.Queries
 	prepared        *queries.Queries // Centralized prepared statements
+	stateMu         sync.RWMutex     // Protects db, config, migrationRunner, queries fields
 	preparedMu      sync.RWMutex     // Protects lazy initialization of prepared statements
 	logger          logging.Logger
 }
@@ -47,11 +48,16 @@ func (s *SQLiteService) Connect(ctx context.Context, config *Config) error {
 		return dberrors.HandleValidationError("Connect", "config", "nil", "config cannot be nil")
 	}
 
+	// Acquire write lock for state mutations
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
 	s.config = config
 
 	// Close any existing connection to prevent resource leaks
 	if s.db != nil {
 		// Close prepared statements first to avoid invalidating statement handles
+		// Note: preparedMu is acquired after stateMu to maintain consistent lock order
 		s.preparedMu.Lock()
 		if s.prepared != nil {
 			if err := s.prepared.Close(); err != nil {
@@ -103,11 +109,16 @@ func (s *SQLiteService) Connect(ctx context.Context, config *Config) error {
 
 // Close closes the database connection
 func (s *SQLiteService) Close() error {
+	// Acquire write lock for state mutations
+	s.stateMu.Lock()
+	defer s.stateMu.Unlock()
+
 	if s.db == nil {
 		return nil
 	}
 
 	// Close prepared statements first to avoid masking errors
+	// Note: preparedMu is acquired after stateMu to maintain consistent lock order
 	s.preparedMu.Lock()
 	if s.prepared != nil {
 		if err := s.prepared.Close(); err != nil && s.logger != nil {
@@ -134,23 +145,28 @@ func (s *SQLiteService) Close() error {
 
 // Migrate runs database migrations using the migration runner
 func (s *SQLiteService) Migrate(ctx context.Context) error {
+	s.stateMu.RLock()
 	if s.db == nil {
+		s.stateMu.RUnlock()
 		return dberrors.HandleConnectionError("Migrate", "database not connected")
 	}
 
 	if s.migrationRunner == nil {
+		s.stateMu.RUnlock()
 		return dberrors.HandleValidationError("Migrate", "migrationRunner", "nil", "migration runner not initialized")
 	}
+	migrationRunner := s.migrationRunner
+	s.stateMu.RUnlock()
 
 	// Validate migrations first
-	if err := s.migrationRunner.ValidateMigrations(); err != nil {
+	if err := migrationRunner.ValidateMigrations(); err != nil {
 		return dberrors.WrapDatabaseErrorWithContext("Migrate", err, map[string]string{
 			"phase": "validation",
 		})
 	}
 
 	// Run migrations
-	if err := s.migrationRunner.RunMigrations(ctx); err != nil {
+	if err := migrationRunner.RunMigrations(ctx); err != nil {
 		return dberrors.WrapDatabaseErrorWithContext("Migrate", err, map[string]string{
 			"phase": "execution",
 		})
@@ -161,12 +177,16 @@ func (s *SQLiteService) Migrate(ctx context.Context) error {
 
 // Health checks the database connection health
 func (s *SQLiteService) Health(ctx context.Context) error {
+	s.stateMu.RLock()
 	if s.db == nil {
+		s.stateMu.RUnlock()
 		return dberrors.HandleConnectionError("Health", "database not connected")
 	}
+	db := s.db
+	s.stateMu.RUnlock()
 
 	// Simple ping to check connection
-	if err := s.db.PingContext(ctx); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		return dberrors.WrapDatabaseErrorWithContext("Health", err, map[string]string{
 			"phase": "ping",
 		})
@@ -174,7 +194,7 @@ func (s *SQLiteService) Health(ctx context.Context) error {
 
 	// Test with a simple query
 	var result int
-	err := s.db.QueryRowContext(ctx, "SELECT 1").Scan(&result)
+	err := db.QueryRowContext(ctx, "SELECT 1").Scan(&result)
 	if err != nil {
 		return dberrors.WrapDatabaseErrorWithContext("Health", err, map[string]string{
 			"phase": "query",
@@ -190,24 +210,33 @@ func (s *SQLiteService) Health(ctx context.Context) error {
 
 // DB returns the underlying database connection for use by repositories
 func (s *SQLiteService) DB() *sql.DB {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
 	return s.db
 }
 
 // GetQueries returns the queries instance for repository use
 func (s *SQLiteService) GetQueries() *queries.Queries {
+	s.stateMu.RLock()
+	defer s.stateMu.RUnlock()
 	return s.queries
 }
 
 // GetMigrationVersion returns the current migration version
 func (s *SQLiteService) GetMigrationVersion(ctx context.Context) (int64, error) {
+	s.stateMu.RLock()
 	if s.db == nil {
+		s.stateMu.RUnlock()
 		return 0, dberrors.HandleConnectionError("GetMigrationVersion", "database not connected")
 	}
 	if s.migrationRunner == nil {
+		s.stateMu.RUnlock()
 		return 0, dberrors.HandleValidationError("GetMigrationVersion", "migrationRunner", "nil", "migration runner not initialized")
 	}
+	migrationRunner := s.migrationRunner
+	s.stateMu.RUnlock()
 
-	version, err := s.migrationRunner.GetCurrentVersion(ctx)
+	version, err := migrationRunner.GetCurrentVersion(ctx)
 	if err != nil {
 		return 0, dberrors.WrapDatabaseError("GetMigrationVersion", err)
 	}
@@ -217,9 +246,14 @@ func (s *SQLiteService) GetMigrationVersion(ctx context.Context) (int64, error) 
 // GetPreparedQueries returns a centralized prepared queries instance for better performance
 // The prepared statements are managed by the service and closed automatically when Close() is called
 func (s *SQLiteService) GetPreparedQueries(ctx context.Context) (*queries.Queries, error) {
+	// Acquire read lock to check db state
+	s.stateMu.RLock()
 	if s.db == nil {
+		s.stateMu.RUnlock()
 		return nil, dberrors.HandleConnectionError("GetPreparedQueries", "database not connected")
 	}
+	db := s.db // Capture db reference while holding stateMu
+	s.stateMu.RUnlock()
 
 	// Fast path: check if prepared queries already exist (read lock)
 	s.preparedMu.RLock()
@@ -231,6 +265,7 @@ func (s *SQLiteService) GetPreparedQueries(ctx context.Context) (*queries.Querie
 	s.preparedMu.RUnlock()
 
 	// Slow path: need to create prepared queries (write lock)
+	// Note: preparedMu is acquired after stateMu to maintain consistent lock order
 	s.preparedMu.Lock()
 	defer s.preparedMu.Unlock()
 
@@ -239,8 +274,17 @@ func (s *SQLiteService) GetPreparedQueries(ctx context.Context) (*queries.Querie
 		return s.prepared, nil
 	}
 
+	// Re-check db state after acquiring preparedMu to ensure it's still valid
+	s.stateMu.RLock()
+	if s.db == nil {
+		s.stateMu.RUnlock()
+		return nil, dberrors.HandleConnectionError("GetPreparedQueries", "database not connected")
+	}
+	db = s.db // Update db reference in case it changed
+	s.stateMu.RUnlock()
+
 	// Create prepared statements for better performance
-	preparedQueries, err := queries.Prepare(ctx, s.db)
+	preparedQueries, err := queries.Prepare(ctx, db)
 	if err != nil {
 		return nil, dberrors.WrapDatabaseError("GetPreparedQueries", err)
 	}
@@ -252,41 +296,50 @@ func (s *SQLiteService) GetPreparedQueries(ctx context.Context) (*queries.Querie
 
 // GetStats returns database connection pool statistics for monitoring
 func (s *SQLiteService) GetStats() sql.DBStats {
+	s.stateMu.RLock()
 	if s.db == nil {
+		s.stateMu.RUnlock()
 		return sql.DBStats{}
 	}
-	return s.db.Stats()
+	db := s.db
+	s.stateMu.RUnlock()
+	return db.Stats()
 }
 
 // Optimize runs VACUUM and ANALYZE to optimize database performance
 func (s *SQLiteService) Optimize(ctx context.Context) error {
+	s.stateMu.RLock()
 	if s.db == nil {
+		s.stateMu.RUnlock()
 		return dberrors.HandleConnectionError("Optimize", "database not connected")
 	}
+	db := s.db
+	config := s.config
+	s.stateMu.RUnlock()
 
 	// Run ANALYZE to update query planner statistics
-	if _, err := s.db.ExecContext(ctx, "ANALYZE"); err != nil {
+	if _, err := db.ExecContext(ctx, "ANALYZE"); err != nil {
 		return dberrors.WrapDatabaseErrorWithContext("Optimize", err, map[string]string{
 			"phase": "analyze",
 		})
 	}
 
 	//  Best-effort WAL checkpoint only if WAL is enabled
-	if s.config != nil && strings.EqualFold(s.config.JournalMode, "WAL") {
-		if _, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil && s.logger != nil {
+	if config != nil && strings.EqualFold(config.JournalMode, "WAL") {
+		if _, err := db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)"); err != nil && s.logger != nil {
 			s.logger.Warn("wal_checkpoint failed", "error", err)
 		}
 	}
 
 	// Run VACUUM to reclaim space and defragment
-	if _, err := s.db.ExecContext(ctx, "VACUUM"); err != nil {
+	if _, err := db.ExecContext(ctx, "VACUUM"); err != nil {
 		return dberrors.WrapDatabaseErrorWithContext("Optimize", err, map[string]string{
 			"phase": "vacuum",
 		})
 	}
 
 	// Let SQLite apply additional internal optimizations (no-op if unsupported)
-	if _, err := s.db.ExecContext(ctx, "PRAGMA optimize"); err != nil && s.logger != nil {
+	if _, err := db.ExecContext(ctx, "PRAGMA optimize"); err != nil && s.logger != nil {
 		s.logger.Warn("PRAGMA optimize failed", "error", err)
 	}
 
@@ -340,12 +393,4 @@ func (s *SQLiteService) configureConnectionPool(db *sql.DB, config *Config) {
 	// Set connection lifetime settings
 	db.SetConnMaxLifetime(config.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(config.ConnMaxIdleTime)
-}
-
-// min returns the minimum of two integers
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

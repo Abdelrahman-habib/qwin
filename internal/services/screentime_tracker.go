@@ -23,7 +23,7 @@ type ScreenTimeTracker struct {
 	lastTime           time.Time
 	startTime          time.Time
 	running            bool // Protected by mutex, indicates if service is active
-	stopTracking       chan bool
+	stopTracking       chan struct{}
 	windowAPI          platform.WindowAPI
 	repository         repository.UsageRepository
 	logger             logging.Logger
@@ -48,10 +48,10 @@ func NewScreenTimeTrackerWithWindowAPI(repo repository.UsageRepository, logger l
 		usageData:    make(map[string]int64),
 		appInfoCache: make(map[string]*platform.AppInfo),
 		// startTime will be set when Start() is called
-		stopTracking: make(chan bool),
-		windowAPI:    windowAPI,
-		repository:   repo,
-		logger:       logger,
+		// stopTracking channel will be created in Start()
+		windowAPI:  windowAPI,
+		repository: repo,
+		logger:     logger,
 		// currentDate is initialized in Start()
 		persistenceEnabled: true, // Default to enabled
 	}
@@ -71,6 +71,9 @@ func (st *ScreenTimeTracker) Start() {
 	if st.startTime.IsZero() {
 		st.startTime = now
 	}
+
+	// Create stop tracking channel for this session
+	st.stopTracking = make(chan struct{})
 
 	// Mark as running
 	st.running = true
@@ -94,7 +97,7 @@ func (st *ScreenTimeTracker) Start() {
 
 // Stop stops the tracking process
 func (st *ScreenTimeTracker) Stop() {
-	// Clear running state and get ticker reference under mutex protection
+	// Clear running state and capture channel reference under mutex protection
 	st.mutex.Lock()
 	if !st.running {
 		st.mutex.Unlock()
@@ -103,6 +106,8 @@ func (st *ScreenTimeTracker) Stop() {
 	st.running = false
 	ticker := st.persistTicker
 	st.persistTicker = nil
+	stopCh := st.stopTracking
+	st.stopTracking = nil
 	wasStarted := !st.startTime.IsZero()
 	st.mutex.Unlock()
 
@@ -111,8 +116,10 @@ func (st *ScreenTimeTracker) Stop() {
 		ticker.Stop()
 	}
 
-	// Stop tracking (block until trackingLoop receives the signal)
-	st.stopTracking <- true
+	// Stop tracking by closing the channel (broadcasts to all listeners)
+	if stopCh != nil {
+		close(stopCh)
+	}
 
 	// Attribute any final elapsed time for the last active app
 	st.mutex.Lock()
@@ -132,6 +139,11 @@ func (st *ScreenTimeTracker) Stop() {
 
 // trackingLoop runs the main tracking loop
 func (st *ScreenTimeTracker) trackingLoop() {
+	// Capture the stop channel reference at start to avoid data races
+	st.mutex.RLock()
+	stopCh := st.stopTracking
+	st.mutex.RUnlock()
+
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
@@ -139,7 +151,7 @@ func (st *ScreenTimeTracker) trackingLoop() {
 		select {
 		case <-ticker.C:
 			st.trackCurrentApp()
-		case <-st.stopTracking:
+		case <-stopCh:
 			return
 		}
 	}

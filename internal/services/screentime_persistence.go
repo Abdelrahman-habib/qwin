@@ -14,9 +14,10 @@ import (
 func (st *ScreenTimeTracker) startPersistenceLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 
-	// Assign ticker to struct field under mutex protection
+	// Assign ticker to struct field and capture stop channel under mutex protection
 	st.mutex.Lock()
 	st.persistTicker = ticker
+	stopCh := st.stopTracking
 	st.mutex.Unlock()
 
 	go func() {
@@ -24,7 +25,7 @@ func (st *ScreenTimeTracker) startPersistenceLoop() {
 			select {
 			case <-ticker.C:
 				st.persistCurrentData()
-			case <-st.stopTracking:
+			case <-stopCh:
 				// Stop the ticker to prevent timer leak
 				ticker.Stop()
 				return
