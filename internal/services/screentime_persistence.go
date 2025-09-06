@@ -3,10 +3,12 @@ package services
 import (
 	"context"
 	"log"
+	"math"
 	"time"
 
 	"qwin/internal/infrastructure/errors"
 	"qwin/internal/platform"
+	"qwin/internal/repository"
 	"qwin/internal/types"
 )
 
@@ -42,68 +44,101 @@ func (st *ScreenTimeTracker) persistCurrentData() {
 
 	ctx := context.Background()
 
+	// Snapshot state under lock to minimize lock contention
 	st.mutex.Lock()
-	defer st.mutex.Unlock()
-
-	// Check if we need to handle date rollover
 	now := time.Now()
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
 
 	if !today.Equal(st.currentDate) {
 		// Date has changed, persist old data and reset for new day
-		st.persistDataForDate(ctx, st.currentDate)
+		oldDate := st.currentDate
+		oldStartTime := st.startTime
+		oldUsageData := make(map[string]int64, len(st.usageData))
+		for k, v := range st.usageData {
+			oldUsageData[k] = v
+		}
+		oldAppInfoCache := make(map[string]*platform.AppInfo, len(st.appInfoCache))
+		for k, v := range st.appInfoCache {
+			oldAppInfoCache[k] = v
+		}
+
+		// Update state for new day
 		st.currentDate = today
 		st.usageData = make(map[string]int64)
 		st.startTime = now
+		st.mutex.Unlock()
+
+		// Persist old data outside the lock
+		st.persistDataForDateWithSnapshot(ctx, oldDate, oldStartTime, oldUsageData, oldAppInfoCache, now)
 		return
 	}
 
-	// Persist current day's data
-	st.persistDataForDate(ctx, st.currentDate)
+	// Snapshot current day's data
+	currentDate := st.currentDate
+	startTime := st.startTime
+	usageDataCopy := make(map[string]int64, len(st.usageData))
+	for k, v := range st.usageData {
+		usageDataCopy[k] = v
+	}
+	appInfoCacheCopy := make(map[string]*platform.AppInfo, len(st.appInfoCache))
+	for k, v := range st.appInfoCache {
+		appInfoCacheCopy[k] = v
+	}
 	st.lastPersist = now
+	st.mutex.Unlock()
+
+	// Persist current day's data outside the lock
+	st.persistDataForDateWithSnapshot(ctx, currentDate, startTime, usageDataCopy, appInfoCacheCopy, now)
 }
 
-// persistDataForDate saves usage data for a specific date
-func (st *ScreenTimeTracker) persistDataForDate(ctx context.Context, date time.Time) {
-	// Calculate total time bounded to the target date to prevent midnight rollover corruption
+// persistDataForDateWithSnapshot saves usage data for a specific date using provided snapshot data
+// This function does not access st.mutex and can be called without holding locks
+func (st *ScreenTimeTracker) persistDataForDateWithSnapshot(
+	ctx context.Context,
+	date time.Time,
+	startTime time.Time,
+	usageData map[string]int64,
+	appInfoCache map[string]*platform.AppInfo,
+	asOfTime time.Time,
+) {
+	// Calculate total time bounded to the target date using DST-safe calculation
 	var totalTime int64
-	if !st.startTime.IsZero() {
+	if !startTime.IsZero() {
 		// Calculate start and end boundaries of the target date
 		startOfDay := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, date.Location())
-		endOfDay := time.Date(date.Year(), date.Month(), date.Day(), 23, 59, 59, 999999999, date.Location())
+		nextMidnight := startOfDay.AddDate(0, 0, 1)
 
 		// Clamp the time interval to the target date boundaries
-		start := st.startTime
+		start := startTime
 		if start.Before(startOfDay) {
 			start = startOfDay
 		}
-
-		end := time.Now()
-		if end.After(endOfDay) {
-			end = endOfDay
+		if start.After(nextMidnight) {
+			start = nextMidnight
 		}
 
-		// Calculate elapsed time only within the target date boundaries
+		end := asOfTime
+		if end.After(nextMidnight) {
+			end = nextMidnight
+		}
+		if end.Before(start) {
+			end = start
+		}
+
+		// Calculate elapsed time only within the target date boundaries using math.Round
 		if end.After(start) {
-			totalTime = int64(end.Sub(start).Seconds())
-		} else {
-			totalTime = 0 // Clamp negatives to 0
+			totalTime = int64(math.Round(end.Sub(start).Seconds()))
 		}
 	}
-	// If startTime is zero (Start() not called), totalTime remains 0
 
-	// Save daily usage summary
-	usageData := &types.UsageData{
+	// Create usage data summary
+	usageDataSummary := &types.UsageData{
 		TotalTime: totalTime,
 	}
 
-	if err := st.repository.SaveDailyUsage(ctx, date, usageData); err != nil {
-		log.Printf("Failed to save daily usage: %v", err)
-	}
-
 	// Prepare app usage data for batch save
-	appUsages := make([]types.AppUsage, 0, len(st.usageData))
-	for name, duration := range st.usageData {
+	appUsages := make([]types.AppUsage, 0, len(usageData))
+	for name, duration := range usageData {
 		appUsage := types.AppUsage{
 			Name:     name,
 			Duration: duration,
@@ -111,7 +146,7 @@ func (st *ScreenTimeTracker) persistDataForDate(ctx context.Context, date time.T
 		}
 
 		// Add cached app info if available
-		if cachedInfo, exists := st.appInfoCache[name]; exists {
+		if cachedInfo, exists := appInfoCache[name]; exists {
 			appUsage.IconPath = cachedInfo.IconPath
 			appUsage.ExePath = cachedInfo.ExePath
 		}
@@ -119,11 +154,27 @@ func (st *ScreenTimeTracker) persistDataForDate(ctx context.Context, date time.T
 		appUsages = append(appUsages, appUsage)
 	}
 
-	// Batch save app usage data
-	if len(appUsages) > 0 {
-		if err := st.repository.BatchProcessAppUsage(ctx, date, appUsages, types.BatchStrategyUpsert); err != nil {
-			log.Printf("Failed to save app usage data: %v", err)
+	// Add timeout to avoid hanging on shutdown
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	// Wrap both operations in a transaction for atomicity
+	if err := st.repository.WithTransaction(ctx, func(txRepo repository.UsageRepository) error {
+		// Save daily usage summary
+		if err := txRepo.SaveDailyUsage(ctx, date, usageDataSummary); err != nil {
+			return err
 		}
+
+		// Batch save app usage data
+		if len(appUsages) > 0 {
+			if err := txRepo.BatchProcessAppUsage(ctx, date, appUsages, types.BatchStrategyUpsert); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}); err != nil {
+		st.logger.Error("Failed to persist usage snapshot", "date", date, "error", err)
 	}
 }
 

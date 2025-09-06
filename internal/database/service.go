@@ -252,7 +252,6 @@ func (s *SQLiteService) GetPreparedQueries(ctx context.Context) (*queries.Querie
 		s.stateMu.RUnlock()
 		return nil, dberrors.HandleConnectionError("GetPreparedQueries", "database not connected")
 	}
-	db := s.db // Capture db reference while holding stateMu
 	s.stateMu.RUnlock()
 
 	// Fast path: check if prepared queries already exist (read lock)
@@ -280,7 +279,7 @@ func (s *SQLiteService) GetPreparedQueries(ctx context.Context) (*queries.Querie
 		s.stateMu.RUnlock()
 		return nil, dberrors.HandleConnectionError("GetPreparedQueries", "database not connected")
 	}
-	db = s.db // Update db reference in case it changed
+	db := s.db
 	s.stateMu.RUnlock()
 
 	// Create prepared statements for better performance
