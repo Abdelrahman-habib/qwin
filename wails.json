@@ -7,6 +7,7 @@
   "frontend:dev:build": "echo dev",
   "frontend:dev:watcher": "pnpm run dev",
   "frontend:dev:serverUrl": "auto",
+  "viteServerTimeout": 30000,
   "author": {
     "name": "Abdelrahman-habib",
     "email": "55106581+Abdelrahman-habib@users.noreply.github.com"

@@ -30,6 +30,16 @@ jobs:
           go-version: "1.23"
           cache: true
 
+      # Install SQLC for vulnerability scanning
+      - name: Install SQLC
+        shell: bash
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+
+      # Generate SQLC code for vulnerability scanning
+      - name: Generate SQLC code
+        run: sqlc generate
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
