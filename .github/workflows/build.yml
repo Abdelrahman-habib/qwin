@@ -113,7 +113,7 @@ jobs:
         if: matrix.build.os == 'windows-latest'
         shell: bash
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           govulncheck ./...
 
       # Frontend linting (can run on all platforms)
