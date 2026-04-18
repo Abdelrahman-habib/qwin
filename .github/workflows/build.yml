@@ -48,7 +48,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.23"
+          go-version: "1.25"
           cache: true
 
       # Install SQLC for code generation
@@ -82,7 +82,7 @@ jobs:
 
       # Setup pnpm before Wails build action (since wails.json uses pnpm commands)
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.10.0
 
@@ -94,7 +94,7 @@ jobs:
           build-name: ${{ matrix.build.name }}
           build-platform: ${{ matrix.build.platform }}
           package: false
-          go-version: "1.23"
+          go-version: "1.25"
           node-version: "18"
 
       # Security checks (Windows only for now since app is Windows-specific)
@@ -113,12 +113,12 @@ jobs:
         if: matrix.build.os == 'windows-latest'
         shell: bash
         run: |
-          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install golang.org/x/vuln/cmd/govulncheck@v1.2.0
           govulncheck ./...
 
       # Frontend linting (can run on all platforms)
       - name: Setup pnpm for linting
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.10.0
 

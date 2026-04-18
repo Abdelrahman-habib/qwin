@@ -39,7 +39,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/settings': typeof SettingsRoute
   '/usage': typeof UsageRoute
-  '/planner': typeof PlannerIndexRoute
+  '/planner/': typeof PlannerIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -56,7 +56,7 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/settings' | '/usage' | '/planner'
+  fullPaths: '/' | '/settings' | '/usage' | '/planner/'
   fileRoutesByTo: FileRoutesByTo
   to: '/' | '/settings' | '/usage' | '/planner'
   id: '__root__' | '/' | '/settings' | '/usage' | '/planner/'
@@ -95,7 +95,7 @@ declare module '@tanstack/react-router' {
     '/planner/': {
       id: '/planner/'
       path: '/planner'
-      fullPath: '/planner'
+      fullPath: '/planner/'
       preLoaderRoute: typeof PlannerIndexRouteImport
       parentRoute: typeof rootRouteImport
     }

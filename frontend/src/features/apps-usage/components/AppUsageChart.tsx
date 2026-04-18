@@ -1,8 +1,8 @@
 import { types } from "@wailsjs/go/models";
 
-import { JSX } from "react/jsx-runtime";
 
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import type { XAxisTickContentProps } from "recharts/types/util/types";
 
 import {
   ChartConfig,
@@ -29,17 +29,17 @@ const chartConfig = {
 } satisfies ChartConfig;
 
 // Custom Tick component for X-axis to display app icons
-interface CustomXAxisTickProps {
-  x: number;
-  y: number;
-  payload: { value: string };
+interface CustomXAxisTickProps extends XAxisTickContentProps {
   appIcons: Record<string, string | undefined>;
 }
 
 const CustomXAxisTick = (props: CustomXAxisTickProps) => {
-  const { x, y, payload, appIcons } = props;
-  const appName = payload.value;
-  const iconPath = appIcons[appName];
+  const x = Number(props.x || 0);
+  const y = Number(props.y || 0);
+  const appName = props.payload?.value as string;
+  const iconPath = appName ? props.appIcons[appName] : undefined;
+
+  if (!appName) return null;
 
   return (
     <foreignObject x={x - 15} y={y} width={30} height={30}>
@@ -98,7 +98,7 @@ export function AppUsageChart({ apps, isLoading }: AppUsageChartProps) {
             tickLine={false}
             axisLine={false}
             interval={0} // Ensure all ticks are displayed
-            tick={(props: JSX.IntrinsicAttributes & CustomXAxisTickProps) => (
+            tick={(props: XAxisTickContentProps) => (
               <CustomXAxisTick {...props} appIcons={appIcons} />
             )}
             height={40} // Adjust height to accommodate icons
