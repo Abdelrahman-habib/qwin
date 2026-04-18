@@ -82,7 +82,7 @@ jobs:
 
       # Setup pnpm before Wails build action (since wails.json uses pnpm commands)
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.10.0
 
@@ -118,7 +118,7 @@ jobs:
 
       # Frontend linting (can run on all platforms)
       - name: Setup pnpm for linting
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v5
         with:
           version: 10.10.0
 
